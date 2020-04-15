@@ -12,6 +12,15 @@ http_archive(
     ],
 )
 
+http_archive(
+    name = "com_grail_bazel_compdb",
+    sha256 = "e62e59e0fdff25a5661b06c61f29f08ea7c66d22859e04adda5e2e27f7a9dd3f",
+    strip_prefix = "bazel-compilation-database-0.3.6",
+    urls = [
+        "https://github.com/grailbio/bazel-compilation-database/archive/0.3.6.tar.gz"
+    ],
+)
+
 # Load tf_repositories() before loading dependencies for other repository so
 # that dependencies like com_google_protobuf won't be overridden.
 load("//tensorflow:workspace.bzl", "tf_repositories")
