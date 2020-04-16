@@ -29,7 +29,7 @@ func @compareOp(%arg0: tensor<i32>, %arg1: tensor<i32>) {
   // CHECK-NEXT: "dataflow.unit_rate"(%arg0, %arg1) ( {
   // CHECK-NEXT:   %1 = "xla_hlo.compare"(%arg0, %arg1) {comparison_direction = "NE"} : (tensor<i32>, tensor<i32>) -> tensor<i1>
   // CHECK-NEXT:   "xla_hlo.return"(%1) : (tensor<i1>) -> ()
-  // CHECK-NEXT: }) {comparison_direction = "NE"} : (tensor<i32>, tensor<i32>) -> tensor<i1>
+  // CHECK-NEXT: }) : (tensor<i32>, tensor<i32>) -> tensor<i1>
   %0 = "xla_hlo.compare"(%arg0, %arg1) {comparison_direction = "NE"} : (tensor<i32>, tensor<i32>) -> tensor<i1>
   return
 }

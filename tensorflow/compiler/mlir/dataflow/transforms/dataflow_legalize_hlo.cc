@@ -24,8 +24,7 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
 
     // create a new unit rate op
     auto unitRateOp = rewriter.create<UnitRateOp>(
-        op.getLoc(), op.getType(),
-        operation->getOperands(), op.getAttrs());
+        op.getLoc(), op.getType(), operation->getOperands());
 
     // wrap the inner op within the unit rate's body
     {
