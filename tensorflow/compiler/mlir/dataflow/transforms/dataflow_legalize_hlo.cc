@@ -1,3 +1,4 @@
+#include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
@@ -9,6 +10,9 @@
 
 namespace mlir {
 namespace dataflow {
+
+#include "tensorflow/compiler/mlir/dataflow/transforms/dataflow_legalize_hlo.cc.inc"
+
 template<typename OpTy>
 class WrapUnitRateOp : public OpRewritePattern<OpTy> {
  public:
@@ -44,6 +48,22 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
   }
 };
 
+class LowerSelectOp : public OpRewritePattern<xla_hlo::SelectOp> {
+ public:
+  using OpRewritePattern<xla_hlo::SelectOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(xla_hlo::SelectOp op, PatternRewriter &rewriter)
+      const override {
+    SmallVector<Value, 2> choices({op.on_true(), op.on_false()});
+
+    auto mux = rewriter.create<MuxOp>(op.getLoc(), op.getType(), op.pred(), choices);
+
+    rewriter.replaceOp(op, mux.getResult());
+
+    return success();
+  }
+};
+
 class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
   void runOnFunction() override {
     Operation *op = getFunction();
@@ -52,16 +72,19 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
 
     ConversionTarget target(*context);
 
-    OwningRewritePatternList patterns;
-
     // all of Dataflow is obviously legal
     target.addLegalDialect<DataflowDialect>();
 
     // permit HLO's ReturnOp as a block terminator
     target.addLegalOp<xla_hlo::ReturnOp>();
 
-    // any simple operation that can be lowered into a combinatorial
-    // circuit is legal if wrapped in a unit rate operation
+    OwningRewritePatternList patterns;
+
+    // register all patterns generated from tablegen
+    populateWithGenerated(context, &patterns);
+
+    // all of these ops can be implemented as a combinational circuit
+    // so register patterns to wrap them in unit rate actors
     registerUnitRateWrapper<xla_hlo::AbsOp>(&target, &patterns, context);
     registerUnitRateWrapper<xla_hlo::CeilOp>(&target, &patterns, context);
     registerUnitRateWrapper<xla_hlo::ConstOp >(&target, &patterns, context);
@@ -101,6 +124,9 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
     registerUnitRateWrapper<xla_hlo::CompareOp>(&target, &patterns, context);
     registerUnitRateWrapper<xla_hlo::TupleOp>(&target, &patterns, context);
     registerUnitRateWrapper<xla_hlo::GetTupleElementOp>(&target, &patterns, context);
+
+    // convert select ops into mux ops
+    patterns.insert<LowerSelectOp>(context);
 
     LogicalResult result = applyPartialConversion(op, target, patterns);
 

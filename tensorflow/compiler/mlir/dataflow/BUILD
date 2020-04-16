@@ -23,8 +23,23 @@ gentbl(
         ("-gen-op-defs", "ir/dataflow_ops.cc.inc"),
     ],
     td_srcs = [
+	"//tensorflow/compiler/mlir/xla:hlo_ops_inc_gen",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:include/mlir/Interfaces/SideEffects.td",
+    ],
+)
+
+gentbl(
+    name = "dataflow_legalize_hlo_inc_gen",
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "transforms/dataflow_legalize_hlo.td",
+    tbl_outs = [
+        ("-gen-rewriters", "transforms/dataflow_legalize_hlo.cc.inc"),
+    ],
+    td_srcs = [
+        "ir/dataflow_ops.td",
+	"//tensorflow/compiler/mlir/xla:hlo_ops_inc_gen",
+        "@llvm-project//mlir:OpBaseTdFiles",
     ],
 )
 
@@ -62,13 +77,16 @@ cc_library(
 cc_library(
     name = "dataflow_legalize_hlo",
     srcs = [
+        "transforms/dataflow_legalize_hlo.cc.inc",
         "transforms/dataflow_legalize_hlo.cc",
     ],
     deps = [
         ":dataflow",
         ":dataflow_dialect_registration",
+	":dataflow_legalize_hlo_inc_gen",
 	"//tensorflow/compiler/mlir/xla:hlo",
 	"//tensorflow/compiler/mlir/xla:xla_dialect_registration",
+        "@llvm-project//llvm:support",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
