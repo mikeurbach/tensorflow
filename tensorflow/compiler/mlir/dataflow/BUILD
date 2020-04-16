@@ -41,6 +41,7 @@ cc_library(
     includes = ["include"],
     deps = [
         ":dataflow_ops_inc_gen",
+	"//tensorflow/compiler/mlir/xla:hlo",
         "@llvm-project//mlir:IR",
     ],
     alwayslink = 1,

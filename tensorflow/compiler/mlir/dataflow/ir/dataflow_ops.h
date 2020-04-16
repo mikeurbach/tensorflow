@@ -5,6 +5,7 @@
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
 #include "mlir/IR/StandardTypes.h"  // TF:llvm-project
 #include "mlir/Interfaces/SideEffects.h"  // from @llvm-project
+#include "tensorflow/compiler/mlir/xla/ir/hlo_ops.h"
 
 namespace mlir {
 namespace dataflow {

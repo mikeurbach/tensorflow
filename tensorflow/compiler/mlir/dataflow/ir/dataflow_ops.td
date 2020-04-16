@@ -15,7 +15,8 @@ class Dataflow_Op<string mnemonic, list<OpTrait> traits = []>
 
 def Dataflow_UnitRateType : Variadic<AnyTypeOf<[AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>>;
 
-def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate", [NoSideEffect]> {
+def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate",
+    [NoSideEffect, SingleBlockImplicitTerminator<"xla_hlo::ReturnOp">]> {
   let summary = [{
     Unit-rate actor.
   }];
