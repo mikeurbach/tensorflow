@@ -45,6 +45,7 @@ mlir_tf_tools_dirs = [
     'tensorflow/compiler/mlir/lite',
     'tensorflow/compiler/mlir/tensorflow',
     'tensorflow/compiler/mlir/xla',
+    'tensorflow/compiler/mlir/dataflow',
     'tensorflow/compiler/aot'
 ]
 config.mlir_tf_tools_dirs = [
