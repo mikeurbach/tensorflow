@@ -14,7 +14,7 @@ namespace dataflow {
   public:
     using OpRewritePattern<OpTy>::OpRewritePattern;
 
-    PatternMatchResult matchAndRewrite(OpTy op, PatternRewriter &rewriter)
+    LogicalResult matchAndRewrite(OpTy op, PatternRewriter &rewriter)
       const override {
       Operation *operation = op.getOperation();
 
@@ -40,11 +40,11 @@ namespace dataflow {
       // insert the unit rate op where the current op is
       rewriter.replaceOp(op, unitRateOp.getResults());
 
-      return Pattern::matchSuccess();
+      return success();
     }
   };
 
-  class LegalizeHLO : public FunctionPass<LegalizeHLO> {
+  class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
     void runOnFunction() override {
       Operation *op = getFunction();
 

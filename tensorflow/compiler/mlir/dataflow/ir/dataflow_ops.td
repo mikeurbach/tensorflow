@@ -1,6 +1,7 @@
 #ifndef DATAFLOW_OPS
 #define DATAFLOW_OPS
 
+include "mlir/Interfaces/SideEffects.td"
 include "mlir/IR/OpBase.td"
 
 def Dataflow_Dialect : Dialect {

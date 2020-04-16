@@ -1,3 +1,4 @@
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
 load("//third_party/mlir:tblgen.bzl", "gentbl")
 load("@com_grail_bazel_compdb//:aspects.bzl", "compilation_database")
 
@@ -22,8 +23,9 @@ gentbl(
         ("-gen-op-defs", "ir/dataflow_ops.cc.inc"),
     ],
     td_srcs = [
-        "@llvm-project//mlir:OpBaseTdFiles"
-    ]
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:include/mlir/Interfaces/SideEffects.td",
+    ],
 )
 
 cc_library(
@@ -63,13 +65,23 @@ cc_library(
     ],
     deps = [
         ":dataflow",
+        ":dataflow_dialect_registration",
 	"//tensorflow/compiler/mlir/xla:hlo",
+	"//tensorflow/compiler/mlir/xla:xla_dialect_registration",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Transforms",
     ],
     alwayslink = 1,
+)
+
+tf_cc_binary(
+    name = "dataflow-opt",
+    deps = [
+        ":dataflow_legalize_hlo",
+        "//tensorflow/compiler/mlir:tf_mlir_opt_main",
+    ],
 )
 
 compilation_database(
