@@ -22,7 +22,7 @@ def Dataflow_DataType : AnyTypeOf<
 def Dataflow_VariadicDataType : Variadic<Dataflow_DataType>;
 
 def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate",
-    [NoSideEffect, SingleBlockImplicitTerminator<"xla_hlo::ReturnOp">]> {
+    [NoSideEffect, SingleBlockImplicitTerminator<"ReturnOp">]> {
   let summary = [{
     Unit-rate actor.
   }];
@@ -66,6 +66,23 @@ def Dataflow_MuxOp : Dataflow_Op<"mux",
   let results = (outs
     Dataflow_DataType:$results
   );
+}
+
+def Dataflow_ReturnOp : Dataflow_Op<"return",
+    [Terminator]> {
+    let summary = [{
+      Return op.
+    }];
+
+    let summary = [{
+      Terminates a block and designates one or more output channels
+      for the current sub-circuit. The semantics of the operation
+      determine how the returned channels are used.
+    }];
+
+    let arguments = (ins
+      Dataflow_VariadicDataType:$results
+    );
 }
 
 #endif // DATAFLOW_OPS

@@ -74,9 +74,6 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
     // all of Dataflow is obviously legal
     target.addLegalDialect<DataflowDialect>();
 
-    // permit HLO's ReturnOp as a block terminator
-    target.addLegalOp<xla_hlo::ReturnOp>();
-
     OwningRewritePatternList patterns;
 
     // register all patterns generated from tablegen
