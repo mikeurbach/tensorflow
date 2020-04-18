@@ -37,7 +37,7 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
       auto innerOp = rewriter.create<OpTy>(
           loc, op.getType(), operation->getOperands(), op.getAttrs());
 
-      rewriter.create<xla_hlo::ReturnOp>(loc, innerOp.getResult());
+      rewriter.create<ReturnOp>(loc, innerOp.getResult());
     }
 
     // insert the unit rate op where the current op is
@@ -53,7 +53,7 @@ class LowerSelectOp : public OpRewritePattern<xla_hlo::SelectOp> {
 
   LogicalResult matchAndRewrite(xla_hlo::SelectOp op, PatternRewriter &rewriter)
       const override {
-    SmallVector<Value, 2> choices({op.on_true(), op.on_false()});
+    SmallVector<Value, 2> choices({op.on_false(), op.on_true()});
 
     auto mux = rewriter.create<MuxOp>(op.getLoc(), op.getType(), op.pred(), choices);
 
@@ -61,6 +61,88 @@ class LowerSelectOp : public OpRewritePattern<xla_hlo::SelectOp> {
 
     return success();
   }
+};
+
+class LowerWhileOp : public OpRewritePattern<xla_hlo::WhileOp> {
+  using OpRewritePattern<xla_hlo::WhileOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(xla_hlo::WhileOp op, PatternRewriter &rewriter)
+      const override {
+    // create a new loop op
+    auto loop = rewriter.create<LoopOp>(op.getLoc(), op.getType(), op.getOperand());
+
+    // build the loop body
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+
+      Location loc = loop.body().getLoc();
+
+      // pick out the types returned by the conditional and body
+      Type selectType = op.cond().front().back().getOperand(0).getType();
+      Type valueType = loop.getOperand().getType();
+
+      // create the block
+      Block *block = rewriter.createBlock(&loop.body());
+      block->addArguments({selectType, valueType});
+
+      // put an initial value on the selection signal to select the input
+      auto initialSelect = rewriter.create<InitialOp>(
+          loc, selectType, block->getArgument(0),
+          rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+
+      // create a mux using the select signal to choose the init or loop value
+      SmallVector<Value, 2> inputChoices(
+          {loop.getOperand(), block->getArgument(1)});
+      auto inputMux = rewriter.create<MuxOp>(
+          loc, valueType, initialSelect, inputChoices);
+      SmallVector<Value, 1> muxedInput({inputMux});
+
+      // feed the muxed result into the condition and store the condition result
+      Block *cond = &op.cond().front();
+      Value condResult = (*std::next(cond->rbegin())).getResult(0);
+      rewriter.eraseOp(&cond->back());
+      rewriter.mergeBlocks(cond, block, muxedInput);
+
+      // feed the muxed result into the body and store the body result
+      Block *body = &op.body().front();
+      Value bodyResult = (*std::next(body->rbegin())).getResult(0);
+      rewriter.eraseOp(&body->back());
+      rewriter.mergeBlocks(body, block, muxedInput);
+
+      SmallVector<Type, 2> demuxResultType({valueType, valueType});
+
+      // demux the input values into void if not selected
+      auto inputDemux = rewriter.create<DemuxOp>(
+          loc, demuxResultType, condResult, inputMux);
+      auto inputChosen = inputDemux.getResult(0);
+      auto inputDropped = inputDemux.getResult(1);
+      rewriter.create<VoidOp>(loc, inputDropped);
+
+      // demux the body result into void if not selected
+      auto bodyDemux = rewriter.create<DemuxOp>(
+          loc, demuxResultType, condResult, bodyResult);
+      auto bodyDropped = bodyDemux.getResult(0);
+      auto bodyChosen = bodyDemux.getResult(1);
+      rewriter.create<VoidOp>(loc, bodyDropped);
+
+      // stack a mux and demux to pass the chosen value to the right output
+      SmallVector<Value, 2> resultChoices({inputChosen, bodyChosen});
+      auto resultMux = rewriter.create<MuxOp>(
+          loc, valueType, condResult, resultChoices);
+      auto resultDemux = rewriter.create<DemuxOp>(
+          loc, demuxResultType, condResult, resultMux);
+
+      // return the cond result and the final demux's outputs
+      SmallVector<Value, 3> returnResults(
+          {condResult, resultDemux.getResult(1), resultDemux.getResult(0)});
+      rewriter.create<ReturnOp>(loc, returnResults);
+    }
+
+    // insert the loop op where the current op is
+    rewriter.replaceOp(op, loop.getResult());
+
+    return success();
+  }  
 };
 
 class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
@@ -123,6 +205,9 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
 
     // convert select ops into mux ops
     patterns.insert<LowerSelectOp>(context);
+
+    // convert while ops into loop ops
+    patterns.insert<LowerWhileOp>(context);
 
     LogicalResult result = applyPartialConversion(op, target, patterns);
 
