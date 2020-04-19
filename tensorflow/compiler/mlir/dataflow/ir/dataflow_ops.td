@@ -13,6 +13,14 @@ def Dataflow_Dialect : Dialect {
 
 class Dataflow_Op<string mnemonic, list<OpTrait> traits = []>
   : Op<Dataflow_Dialect, mnemonic, traits> {
+
+  let verifier = [{
+      Operation *op = this->getOperation();
+      if(!op->hasOneUse()) {
+          return op->emitOpError("may only have one use");
+      }
+      return success();
+  }];
 }
 
 // types
