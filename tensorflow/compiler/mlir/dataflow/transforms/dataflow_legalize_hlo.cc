@@ -4,6 +4,7 @@
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
 #include "mlir/IR/PatternMatch.h"  // TF:llvm-project
 #include "mlir/Pass/Pass.h"  // TF:llvm-project
+#include "mlir/Pass/PassManager.h"  // TF:llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // TF:llvm-project
 #include "tensorflow/compiler/mlir/dataflow/ir/dataflow_ops.h"
 #include "tensorflow/compiler/mlir/xla/ir/hlo_ops.h"
@@ -231,8 +232,14 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
   }
 };
 
-static PassRegistration<LegalizeHLO> pass(
-    "dataflow-legalize-hlo", "Legalize from the XLA HLO dialect to the Dataflow dialect");
+static void pipelineBuilder(OpPassManager &passManager) {
+  passManager.addPass(std::make_unique<LegalizeHLO>());
+}
+
+static PassPipelineRegistration<> pipeline(
+    "dataflow-legalize-hlo",
+    "Legalize from the XLA HLO dialect to the Dataflow dialect",
+    pipelineBuilder);
 
 } // end namespace dataflow
 } // end namespace mlir
