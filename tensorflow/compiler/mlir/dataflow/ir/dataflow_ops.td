@@ -16,9 +16,11 @@ class Dataflow_Op<string mnemonic, list<OpTrait> traits = []>
 
   let verifier = [{
       Operation *op = this->getOperation();
-      if(!op->hasOneUse()) {
+
+      if(std::distance(op->use_begin(), op->use_end()) > op->getNumResults()) {
           return op->emitOpError("may only have one use");
       }
+
       return success();
   }];
 }
@@ -108,10 +110,39 @@ def Dataflow_DemuxOp : Dataflow_Op<"demux",
   );
 }
 
+// channel operations
+
+def Dataflow_ForkOp : Dataflow_Op<"fork",
+  [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+    Fork op.
+  }];
+
+  let description = [{
+    To indicate channels with fan-out, we use a `fork` operator that will
+    create channels for each downstream actor when lowered. This lets us
+    ensure the handshaking is performed correctly with each downstream actor
+    when a channel fans out. The verifier ensures that each operation's value
+    has exactly one use, except for `fork` operators.
+  }];
+
+  let arguments = (ins
+    Dataflow_VariadicDataType:$arg
+  );
+
+  let results = (outs
+    Dataflow_VariadicDataType:$results
+  );
+
+  let verifier = [{
+      return success();
+  }];
+}
+
 // helper operations
 
 def Dataflow_LoopOp : Dataflow_Op<"loop",
-    [NoSideEffect]> {
+    [NoSideEffect, SameOperandsAndResultType]> {
   let summary = [{
     Loop op.
   }];

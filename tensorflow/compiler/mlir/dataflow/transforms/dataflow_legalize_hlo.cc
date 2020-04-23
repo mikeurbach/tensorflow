@@ -1,4 +1,5 @@
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallVector.h"  // TF:llvm-project
+#include "mlir/Analysis/Verifier.h"  // TF:llvm-project
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
@@ -232,8 +233,42 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
   }
 };
 
+class InsertForks : public PassWrapper<InsertForks, FunctionPass> {
+  void runOnFunction() override {
+    FuncOp op = getFunction();
+
+    OpBuilder builder(op.getContext());
+
+    op.walk([&builder](Operation *op){
+      if(std::distance(op->use_begin(), op->use_end()) > 1) {
+        builder.setInsertionPointAfter(op);
+        auto copy = builder.clone(*op);
+        auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResults());
+        op->replaceAllUsesWith(fork);
+        op->erase();
+      }
+    });
+  }
+};
+
+class VerifierPass : public PassWrapper<VerifierPass, OperationPass<ModuleOp>> {
+  void runOnOperation() {
+    if (failed(verify(getOperation()))) {
+      signalPassFailure();
+    }
+
+    markAllAnalysesPreserved();
+  }
+};
+
 static void pipelineBuilder(OpPassManager &passManager) {
+  // we can't insert the forks during dialect conversion,
+  // since we can't traverse the IR structure while it's being rewritten
+  // so we split fork insertion into another pass
+  // and run the verifier at the end
   passManager.addPass(std::make_unique<LegalizeHLO>());
+  passManager.addPass(std::make_unique<InsertForks>());
+  passManager.addPass(std::make_unique<VerifierPass>());
 }
 
 static PassPipelineRegistration<> pipeline(
