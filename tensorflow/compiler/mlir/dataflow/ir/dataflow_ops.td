@@ -13,16 +13,6 @@ def Dataflow_Dialect : Dialect {
 
 class Dataflow_Op<string mnemonic, list<OpTrait> traits = []>
   : Op<Dataflow_Dialect, mnemonic, traits> {
-
-  let verifier = [{
-      Operation *op = this->getOperation();
-
-      if(std::distance(op->use_begin(), op->use_end()) > op->getNumResults()) {
-          return op->emitOpError("may only have one use");
-      }
-
-      return success();
-  }];
 }
 
 // types
@@ -48,10 +38,6 @@ def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate",
     and outputs directly. Upon lowering, the relevant handshaking
     signals will be generated around the wrapped combinational circuit.
   }];
-
-  let arguments = (ins
-    Dataflow_VariadicDataType:$args
-  );
 
   let results = (outs
     Dataflow_VariadicDataType:$results
@@ -122,7 +108,7 @@ def Dataflow_ForkOp : Dataflow_Op<"fork",
     To indicate channels with fan-out, we use a `fork` operator that will
     create channels for each downstream actor when lowered. This lets us
     ensure the handshaking is performed correctly with each downstream actor
-    when a channel fans out. The verifier ensures that each operation's value
+    when a channel fans out. A verifier ensures that each operation's value
     has exactly one use, except for `fork` operators.
   }];
 
@@ -133,10 +119,6 @@ def Dataflow_ForkOp : Dataflow_Op<"fork",
   let results = (outs
     Dataflow_VariadicDataType:$results
   );
-
-  let verifier = [{
-      return success();
-  }];
 }
 
 // helper operations

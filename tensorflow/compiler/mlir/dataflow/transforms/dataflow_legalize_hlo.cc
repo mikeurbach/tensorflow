@@ -1,5 +1,4 @@
 #include "llvm/ADT/SmallVector.h"  // TF:llvm-project
-#include "mlir/Analysis/Verifier.h"  // TF:llvm-project
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
@@ -26,7 +25,7 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
 
     // create a new unit rate op
     auto unitRateOp = rewriter.create<UnitRateOp>(
-        op.getLoc(), op.getType(), operation->getOperands());
+        op.getLoc(), op.getType());
 
     // wrap the inner op within the unit rate's body
     {
@@ -235,40 +234,49 @@ class LegalizeHLO : public PassWrapper<LegalizeHLO, FunctionPass> {
 
 class InsertForks : public PassWrapper<InsertForks, FunctionPass> {
   void runOnFunction() override {
-    FuncOp op = getFunction();
+    FuncOp funcOp = getFunction();
 
-    OpBuilder builder(op.getContext());
+    OpBuilder builder(funcOp.getContext());
 
-    op.walk([&builder](Operation *op){
-      if(std::distance(op->use_begin(), op->use_end()) > 1) {
-        builder.setInsertionPointAfter(op);
-        auto copy = builder.clone(*op);
-        auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResults());
-        op->replaceAllUsesWith(fork);
-        op->erase();
-      }
-    });
+    funcOp.walk(
+        [&builder](Operation *op){
+          if(std::distance(op->use_begin(), op->use_end()) > op->getNumResults()) {
+            builder.setInsertionPointAfter(op);
+            auto copy = builder.clone(*op);
+            auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResults());
+            op->replaceAllUsesWith(fork);
+            op->erase();
+          }
+        });
   }
 };
 
-class VerifierPass : public PassWrapper<VerifierPass, OperationPass<ModuleOp>> {
-  void runOnOperation() {
-    if (failed(verify(getOperation()))) {
-      signalPassFailure();
-    }
+class CustomVerifierPass : public PassWrapper<CustomVerifierPass, FunctionPass> {
+  void runOnFunction() {
+    FuncOp funcOp = getFunction();
 
-    markAllAnalysesPreserved();
+    MLIRContext *context = funcOp.getContext();
+
+    funcOp.walk(
+        [&, context](Operation *op) {
+          // check that only fork operations fan out
+          if(op->getName() == OperationName("dataflow.fork", context)) {
+            return;
+          }
+
+          auto dist = std::distance(op->use_begin(), op->use_end());
+          if(dist > op->getNumResults()) {
+            op->emitError() << "has " << dist << " uses but " << op->getNumResults() << " results.";
+            signalPassFailure();
+          }
+        });
   }
 };
 
 static void pipelineBuilder(OpPassManager &passManager) {
-  // we can't insert the forks during dialect conversion,
-  // since we can't traverse the IR structure while it's being rewritten
-  // so we split fork insertion into another pass
-  // and run the verifier at the end
   passManager.addPass(std::make_unique<LegalizeHLO>());
   passManager.addPass(std::make_unique<InsertForks>());
-  passManager.addPass(std::make_unique<VerifierPass>());
+  passManager.addPass(std::make_unique<CustomVerifierPass>());
 }
 
 static PassPipelineRegistration<> pipeline(

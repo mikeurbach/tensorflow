@@ -87,7 +87,6 @@ cc_library(
 	"//tensorflow/compiler/mlir/xla:hlo",
 	"//tensorflow/compiler/mlir/xla:xla_dialect_registration",
         "@llvm-project//llvm:support",
-        "@llvm-project//mlir:Analysis",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
