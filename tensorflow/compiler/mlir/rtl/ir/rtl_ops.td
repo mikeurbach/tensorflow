@@ -13,7 +13,216 @@ def RTL_Dialect : Dialect {
 }
 
 class RTL_Op<string mnemonic, list<OpTrait> traits = []>
-  : Op<RTL_Dialect, mnemonic, traits> {
+    : Op<RTL_Dialect, mnemonic, traits> {
+}
+
+// types
+
+def RTL_ControlType : AnyTypeOf<
+    [AnySignlessInteger, TensorOf<[AnySignlessInteger]>]>;
+
+def RTL_DataType : AnyTypeOf<
+    [AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>;
+
+// unit rate ops
+
+def RTL_ConstantOp : RTL_Op<"constant",
+    [ConstantLike, NoSideEffect]> {
+  let summary = [{
+    Constant op.
+  }];
+
+  let description = [{
+    An operation that produces a value that is always valid.
+  }];
+
+  let arguments = (ins
+    ElementsAttr:$value
+  );
+
+  let results = (outs
+    RTL_DataType:$results
+  );
+}
+
+// arithmetic
+
+class RTL_UnaryArithmeticOp<string mnemonic, list<OpTrait> traits = []>
+    : RTL_Op<mnemonic, !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
+  let arguments = (ins
+    RTL_DataType:$arg
+  );
+
+  let results = (outs
+    RTL_DataType:$result
+  );
+}
+
+def RTL_NegateOp : RTL_UnaryArithmeticOp<"negate"> {
+  let summary = [{
+    Negate op.
+  }];
+
+  let description = [{
+    An operation to represent unary negate.
+  }];
+}
+
+class RTL_BinaryArithmeticOp<string mnemonic, list<OpTrait> traits = []>
+    : RTL_Op<mnemonic, !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
+  let arguments = (ins
+    RTL_DataType:$left,
+    RTL_DataType:$right
+  );
+
+  let results = (outs
+    RTL_DataType:$result
+  );
+}
+
+def RTL_AddOp : RTL_BinaryArithmeticOp<"add", [Commutative]> {
+  let summary = [{
+    Add op.
+  }];
+
+  let description = [{
+    An operation to represent binary add.
+  }];
+}
+
+def RTL_DivOp : RTL_BinaryArithmeticOp<"div"> {
+  let summary = [{
+    Div op.
+  }];
+
+  let description = [{
+    An operation to represent binary div.
+  }];
+}
+
+def RTL_MulOp : RTL_BinaryArithmeticOp<"mul", [Commutative]> {
+  let summary = [{
+    Mul op.
+  }];
+
+  let description = [{
+    An operation to represent binary mul.
+  }];
+}
+
+def RTL_PowOp : RTL_BinaryArithmeticOp<"pow"> {
+  let summary = [{
+    Pow op.
+  }];
+
+  let description = [{
+    An operation to represent binary pow.
+  }];
+}
+
+def RTL_RemOp : RTL_BinaryArithmeticOp<"rem"> {
+  let summary = [{
+    Rem op.
+  }];
+
+  let description = [{
+    An operation to represent binary rem.
+  }];
+}
+
+def RTL_ShiftLeftOp : RTL_BinaryArithmeticOp<"shift_left"> {
+  let summary = [{
+    Shift left op.
+  }];
+
+  let description = [{
+    An operation to represent binary shift left.
+  }];
+}
+
+def RTL_ShiftRightOp : RTL_BinaryArithmeticOp<"shift_right"> {
+  let summary = [{
+    Shift right op.
+  }];
+
+  let description = [{
+    An operation to represent binary shift right.
+  }];
+}
+
+def RTL_SubOp : RTL_BinaryArithmeticOp<"sub"> {
+  let summary = [{
+    Sub op.
+  }];
+
+  let description = [{
+    An operation to represent binary sub.
+  }];
+}
+
+// logical
+
+class RTL_UnaryLogicalOp<string mnemonic, list<OpTrait> traits = []>
+    : RTL_Op<mnemonic, !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
+  let arguments = (ins
+    RTL_ControlType:$arg
+  );
+
+  let results = (outs
+    RTL_ControlType:$result
+  );
+}
+
+def RTL_NotOp : RTL_UnaryLogicalOp<"not"> {
+  let summary = [{
+    Not op.
+  }];
+
+  let description = [{
+    An operation to represent unary not.
+  }];
+}
+
+class RTL_BinaryLogicalOp<string mnemonic, list<OpTrait> traits = []>
+    : RTL_Op<mnemonic, !listconcat(traits, [NoSideEffect, Commutative, SameOperandsAndResultType])> {
+  let arguments = (ins
+    RTL_DataType:$left,
+    RTL_DataType:$right
+  );
+
+  let results = (outs
+    RTL_DataType:$result
+  );
+}
+
+def RTL_AndOp : RTL_BinaryLogicalOp<"and"> {
+  let summary = [{
+    And op.
+  }];
+
+  let description = [{
+    An operation to represent binary and.
+  }];
+}
+
+def RTL_OrOp : RTL_BinaryLogicalOp<"or"> {
+  let summary = [{
+    Or op.
+  }];
+
+  let description = [{
+    An operation to represent binary or.
+  }];
+}
+
+def RTL_XorOp : RTL_BinaryLogicalOp<"xor"> {
+  let summary = [{
+    Xor op.
+  }];
+
+  let description = [{
+    An operation to represent binary xor.
+  }];
 }
 
 #endif // RTL_OPS

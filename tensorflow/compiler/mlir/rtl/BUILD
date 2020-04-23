@@ -84,6 +84,8 @@ cc_library(
 	":rtl_process_dataflow_inc_gen",
 	"//tensorflow/compiler/mlir/dataflow",
 	"//tensorflow/compiler/mlir/dataflow:dataflow_dialect_registration",
+	"//tensorflow/compiler/mlir/xla:hlo",
+	"//tensorflow/compiler/mlir/xla:xla_dialect_registration",
         "@llvm-project//llvm:support",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
