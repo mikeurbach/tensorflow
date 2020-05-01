@@ -22,7 +22,7 @@ def RTL_ControlType : AnyTypeOf<
     [AnySignlessInteger, TensorOf<[AnySignlessInteger]>]>;
 
 def RTL_DataType : AnyTypeOf<
-    [AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>;
+    [AnySignlessInteger, AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>;
 
 // unit rate ops
 
