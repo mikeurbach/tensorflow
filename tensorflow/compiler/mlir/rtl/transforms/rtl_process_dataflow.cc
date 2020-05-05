@@ -154,21 +154,27 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
         }
     }
 
-    // compute ready signal for operands
-    SmallVector<Value, 1> resultsReady;
-    for(unsigned i = entry->getNumArguments() - 1, j = 0; j < op.getNumResults(); --i, ++j) {
-      // index to the ready signals at the end of the arguments
-      resultsReady.push_back(entry->getArgument(i));
-    }
-    resultsReady.push_back(valid);
-    AndOp validAndReady = builder.create<AndOp>(
-        op.getLoc(), bitType, resultsReady, SmallVector<NamedAttribute, 0>());
-
-    // return the ready bits for the inputs, followed by the data and valid bits
     SmallVector<Value, 3> results;
-    for(unsigned i = 0; i < op.getNumOperands(); ++i) {
-      results.push_back(validAndReady);
+
+    // can skip ready signal for constant ops
+    if(op.getNumOperands() > 0) {
+      // compute ready signal for operands
+      SmallVector<Value, 1> resultsReady;
+      for(unsigned i = entry->getNumArguments() - 1, j = 0; j < op.getNumResults(); --i, ++j) {
+        // index to the ready signals at the end of the arguments
+        resultsReady.push_back(entry->getArgument(i));
+      }
+      resultsReady.push_back(valid);
+      AndOp validAndReady = builder.create<AndOp>(
+          op.getLoc(), bitType, resultsReady, SmallVector<NamedAttribute, 0>());
+
+      // return the ready bits for the inputs
+      for(unsigned i = 0; i < op.getNumOperands(); ++i) {
+        results.push_back(validAndReady);
+      }
     }
+
+    // return the data and valid bits
     results.push_back(operation->getResult(0));
     results.push_back(valid);
 
