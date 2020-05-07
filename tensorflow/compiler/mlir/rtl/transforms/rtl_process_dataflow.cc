@@ -1,3 +1,4 @@
+#include <numeric>
 #include "llvm/ADT/SmallString.h"  // TF:llvm-project
 #include "llvm/ADT/SmallVector.h"  // TF:llvm-project
 #include "llvm/ADT/Twine.h"  // TF:llvm-project
@@ -123,35 +124,30 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     // compute valid signal for results
     Value valid;
-    switch(op.getNumOperands()) {
-      case 0:
-        {
-          // with no inputs, always valid
-          RankedTensorType attrType = RankedTensorType::get({}, bitType);
-          ConstantOp const1 = builder.create<ConstantOp>(
-              op.getLoc(), bitType, DenseElementsAttr::get(attrType, APInt(1, 1)));
-          valid = const1.getResult();
-          break;
-        }
-      case 1:
-        {
-          // with one input, valid when it is
-          valid = entry->getArgument(1);
-          break;
-        }
-      default:
-        {
-          // with more than one input, valid when they all are
-          SmallVector<Value, 2> operandValids;
-          for(unsigned i = 0; i < op.getNumOperands(); ++i) {
-            // index to the valid signal in the arguments
-            operandValids.push_back(entry->getArgument((i * 2) + 1));
-          }
-          AndOp andValid = builder.create<AndOp>(
-              op.getLoc(), bitType, operandValids, SmallVector<NamedAttribute, 0>());
-          valid = andValid.getResult();
-          break;
-        }
+    if(op.getNumOperands() == 0) {
+      // with no inputs, always valid
+      RankedTensorType attrType = RankedTensorType::get({}, bitType);
+      ConstantOp const1 = builder.create<ConstantOp>(
+          op.getLoc(), bitType, DenseElementsAttr::get(attrType, APInt(1, 1)));
+      valid = const1.getResult();
+    } else {
+      // with inputs, valid when they all are
+      SmallVector<Value, 2> operandValids;
+
+      // index to the valid signal in the arguments
+      for(unsigned i = 0; i < op.getNumOperands(); ++i) {
+        operandValids.push_back(entry->getArgument((i * 2) + 1));
+      }
+
+      // combine valid signals in a balanced tree of two-input adders
+      // returns the obvious for one or two operands, the most common,
+      // and the larger cases could be optimized later
+      valid = std::accumulate(operandValids.begin() + 1, operandValids.end(), operandValids[0],
+                              [&builder, &op, &bitType](Value operandValid1, Value operandValid2) {
+                                AndOp andValid = builder.create<AndOp>(
+                                    op.getLoc(), bitType, operandValid1, operandValid2);
+                                return andValid.getResult();
+                              });
     }
 
     SmallVector<Value, 3> results;
