@@ -19,10 +19,10 @@ class RTL_Op<string mnemonic, list<OpTrait> traits = []>
 // types
 
 def RTL_ControlType : AnyTypeOf<
-    [AnySignlessInteger, TensorOf<[AnySignlessInteger]>]>;
+    [0DTensorOf<[AnySignlessInteger]>]>;
 
 def RTL_DataType : AnyTypeOf<
-    [AnySignlessInteger, AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>;
+    [0DTensorOf<[AnySignlessInteger]>, TupleOf<[0DTensorOf<[AnySignlessInteger]>]>]>;
 
 // unit rate ops
 

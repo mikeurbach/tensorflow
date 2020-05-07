@@ -18,10 +18,10 @@ class Dataflow_Op<string mnemonic, list<OpTrait> traits = []>
 // types
 
 def Dataflow_ControlType : AnyTypeOf<
-    [AnySignlessInteger, TensorOf<[AnySignlessInteger]>]>;
+    [0DTensorOf<[AnySignlessInteger]>]>;
 
 def Dataflow_DataType : AnyTypeOf<
-    [AnyStaticShapeTensor, TupleOf<[AnyStaticShapeTensor]>]>;
+    [0DTensorOf<[AnySignlessInteger]>, TupleOf<[0DTensorOf<[AnySignlessInteger]>]>]>;
 
 def Dataflow_VariadicDataType : Variadic<Dataflow_DataType>;
 

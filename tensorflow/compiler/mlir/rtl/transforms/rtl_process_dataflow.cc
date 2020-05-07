@@ -79,7 +79,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   FunctionType liftedFunctionType(Operation &op) {
     Builder builder(op.getContext());
 
-    Type bitType = builder.getI1Type();
+    RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     SmallVector<Type, 2> inputTypes;
     SmallVector<Type, 2> outputTypes;
@@ -113,7 +113,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     assert(op.getNumResults() == 1 && "unit rate actors only support a single result");
 
     OpBuilder builder(entry->getParent());
-    Type bitType = builder.getI1Type();
+    RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     // wire up data signals to wrapped operation
     Operation *operation = builder.clone(op);
@@ -126,9 +126,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     Value valid;
     if(op.getNumOperands() == 0) {
       // with no inputs, always valid
-      RankedTensorType attrType = RankedTensorType::get({}, bitType);
       ConstantOp const1 = builder.create<ConstantOp>(
-          op.getLoc(), bitType, DenseElementsAttr::get(attrType, APInt(1, 1)));
+          op.getLoc(), bitType, DenseElementsAttr::get(bitType, APInt(1, 1)));
       valid = const1.getResult();
     } else {
       // with inputs, valid when they all are
