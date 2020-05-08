@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# provide the path to a Tensorflow 2 saved model as a command line argument
+
+bazel build \
+  //tensorflow/compiler/mlir:tf-mlir-translate \
+  //tensorflow/compiler/mlir:tf-opt \
+  //tensorflow/compiler/mlir/xla:xla-opt \
+  //tensorflow/compiler/mlir/dataflow:dataflow-opt \
+  //tensorflow/compiler/mlir/rtl:rtl-opt &&
+bazel-bin/tensorflow/compiler/mlir/tf-mlir-translate \
+  -savedmodel-objectgraph-to-mlir \
+  $1 |
+bazel-bin/tensorflow/compiler/mlir/tf-opt \
+  -tf-executor-to-control-conversion \
+  -tf-raise-control-flow \
+  -tf-standard-pipeline |
+bazel-bin/tensorflow/compiler/mlir/xla/xla-opt \
+  -allow-unregistered-dialect \
+  -xla-legalize-tf-control-flow \
+  -xla-legalize-tf \
+  -inline \
+  -symbol-dce |
+bazel-bin/tensorflow/compiler/mlir/dataflow/dataflow-opt \
+  -dataflow-legalize-hlo |
+bazel-bin/tensorflow/compiler/mlir/rtl/rtl-opt \
+  -rtl-process-dataflow
