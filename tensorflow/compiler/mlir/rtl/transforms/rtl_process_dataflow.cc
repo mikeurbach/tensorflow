@@ -108,11 +108,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   }
 
   void configureLiftedFunctionBlock(Operation &op, Block *entry) {
-    // we are assuming there is only one result and valid signal for it.
-    // multiple outputs could be acheived with a fork and multiple parallel unit rates.
-    assert(op.getNumResults() == 1 && "unit rate actors only support a single result");
-
     OpBuilder builder(entry->getParent());
+
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     // wire up data signals to wrapped operation

@@ -42,7 +42,7 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
     }
 
     // insert the unit rate op where the current op is
-    rewriter.replaceOp(op, unitRateOp.getResults());
+    rewriter.replaceOp(op, unitRateOp.getResult());
 
     return success();
   }
@@ -240,10 +240,10 @@ class InsertForks : public PassWrapper<InsertForks, FunctionPass> {
 
     funcOp.walk(
         [&builder](Operation *op){
-          if(std::distance(op->use_begin(), op->use_end()) > op->getNumResults()) {
+          if(op->getNumResults() == 1 && std::distance(op->use_begin(), op->use_end()) > 1) {
             builder.setInsertionPointAfter(op);
             auto copy = builder.clone(*op);
-            auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResults());
+            auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResult(0));
             op->replaceAllUsesWith(fork);
             op->erase();
           }

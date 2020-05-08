@@ -37,10 +37,13 @@ def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate",
     An operation that wraps a combinational op, connecting the inputs
     and outputs directly. Upon lowering, the relevant handshaking
     signals will be generated around the wrapped combinational circuit.
+    Only a single output is supported. Multiple outputs could be achieved
+    by forking the input(s) and connecting multiple single-output unit-rate
+    actors in parallel.
   }];
 
   let results = (outs
-    Dataflow_VariadicDataType:$results
+    Dataflow_DataType:$result
   );
 
   let regions = (region
@@ -113,7 +116,7 @@ def Dataflow_ForkOp : Dataflow_Op<"fork",
   }];
 
   let arguments = (ins
-    Dataflow_VariadicDataType:$arg
+    Dataflow_DataType:$arg
   );
 
   let results = (outs
