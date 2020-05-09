@@ -8,6 +8,7 @@
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
 #include "mlir/IR/PatternMatch.h"  // TF:llvm-project
+#include "mlir/IR/SymbolTable.h"  // TF:llvm-project
 #include "mlir/Pass/Pass.h"  // TF:llvm-project
 #include "mlir/Pass/PassManager.h"  // TF:llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // TF:llvm-project
@@ -65,13 +66,11 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     FunctionType liftedType = liftedFunctionType(inner);
 
-    StringRef liftedName = liftedFunctionName(*op.getOperation());
+    std::string liftedName = liftedFunctionName(*op.getOperation());
 
     FuncOp lifted = FuncOp::create(op.getLoc(), liftedName, liftedType);
 
-    Block *liftedEntry = lifted.addEntryBlock();
-
-    configureLiftedFunctionBlock(inner, liftedEntry);
+    configureLiftedFunction(inner, lifted);
 
     parentModule.push_back(lifted.getOperation());
   }
@@ -99,15 +98,21 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     return builder.getFunctionType(inputTypes, outputTypes);
   }
 
-  StringRef liftedFunctionName(Operation &op) {
-    SmallString<10> name;
-    name += op.getName().getStringRef();
-    name += "_";
-    name += std::to_string((long) ((const void *) &op));
-    return name.str();
+  std::string liftedFunctionName(Operation &op) {
+    std::string name = "";
+    if(op.hasTrait<mlir::OpTrait::Symbol>()){
+      name += SymbolTable::getSymbolName(&op);
+    } else {
+      name += op.getName().getStringRef();
+      name += "_";
+      name += std::to_string((long) ((const void *) &op));
+    }
+    return name;
   }
 
-  void configureLiftedFunctionBlock(Operation &op, Block *entry) {
+  void configureLiftedFunction(Operation &op, FuncOp lifted) {
+    Block *entry = lifted.addEntryBlock();
+
     OpBuilder builder(entry->getParent());
 
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
@@ -116,7 +121,24 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     Operation *operation = builder.clone(op);
     for(unsigned i = 0; i < op.getNumOperands(); ++i) {
       // index to the data signal in the arguments
-      operation->setOperand(i, entry->getArgument(i * 2));
+      unsigned index = i * 2;
+      operation->setOperand(i, entry->getArgument(index));
+
+      // track the source as an arg attribute
+      Operation *sourceOp;
+      Value operand = op.getOperand(i);
+      switch(operand.getKind()) {
+        case mlir::Value::Kind::OpResult0:
+        case mlir::Value::Kind::OpResult1:
+        case mlir::Value::Kind::TrailingOpResult:
+          sourceOp = operand.getDefiningOp();
+          break;
+        case mlir::Value::Kind::BlockArgument:
+          sourceOp = static_cast<BlockArgument&>(operand).getOwner()->getParentOp();
+          break;
+      }
+      FlatSymbolRefAttr attr = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
+      lifted.setArgAttr(index, "rtl.source", attr);
     }
 
     // compute valid signal for results
