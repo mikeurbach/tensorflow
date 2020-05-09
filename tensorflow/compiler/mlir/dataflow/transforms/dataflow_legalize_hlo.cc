@@ -243,7 +243,8 @@ class InsertForks : public PassWrapper<InsertForks, FunctionPass> {
           if(op->getNumResults() == 1 && std::distance(op->use_begin(), op->use_end()) > 1) {
             builder.setInsertionPointAfter(op);
             auto copy = builder.clone(*op);
-            auto fork = builder.create<ForkOp>(copy->getLoc(), copy->getResultTypes(), copy->getResult(0));
+            auto fork = builder.create<ForkOp>(
+                copy->getLoc(), copy->getResultTypes(), copy->getResult(0));
             op->replaceAllUsesWith(fork);
             op->erase();
           }
@@ -251,24 +252,35 @@ class InsertForks : public PassWrapper<InsertForks, FunctionPass> {
   }
 };
 
-class CustomVerifierPass : public PassWrapper<CustomVerifierPass, FunctionPass> {
-  void runOnFunction() {
-    FuncOp funcOp = getFunction();
+class CustomVerifierPass : public PassWrapper<CustomVerifierPass, OperationPass<ModuleOp>> {
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
 
-    MLIRContext *context = funcOp.getContext();
+    unsigned count = 0;
+    module.walk([&count](FuncOp funcOp) mutable { ++count; });
+    if(count != 1) {
+      module.getOperation()->emitError() << "has " << count << " FuncOps, expected 1.";
+      signalPassFailure();
+    }
 
-    funcOp.walk(
-        [&, context](Operation *op) {
-          // check that only fork operations fan out
-          if(op->getName() == OperationName("dataflow.fork", context)) {
-            return;
-          }
+    module.walk(
+        [&](FuncOp funcOp) {
+          MLIRContext *context = funcOp.getContext();
 
-          auto dist = std::distance(op->use_begin(), op->use_end());
-          if(dist > op->getNumResults()) {
-            op->emitError() << "has " << dist << " uses but " << op->getNumResults() << " results.";
-            signalPassFailure();
-          }
+          funcOp.walk(
+              [&, context](Operation *op) {
+                // check that only fork operations fan out
+                if(op->getName() == OperationName("dataflow.fork", context)) {
+                  return;
+                }
+
+                auto dist = std::distance(op->use_begin(), op->use_end());
+                if(dist > op->getNumResults()) {
+                  op->emitError() << "has " << dist <<
+                      " uses but " << op->getNumResults() << " results.";
+                  signalPassFailure();
+                }
+              });
         });
   }
 };
