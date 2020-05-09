@@ -158,6 +158,10 @@ void LowerWhile(TF::WhileOp op, ModuleOp module) {
   ImportXlaRegion(body_branch, &while_op.body(), loc);
   ImportXlaRegion(cond_branch, &while_op.cond(), loc, /*tuple_return=*/false);
 
+  // Mark the func's as private so they can be eliminated after inlining
+  body_branch.setVisibility(mlir::SymbolTable::Visibility::Private);
+  cond_branch.setVisibility(mlir::SymbolTable::Visibility::Private);
+
   // De-tuple the results of the xla hlo while.
   builder.setInsertionPointAfter(op);
   Detuple(while_op.getResult(), op.getResults(), &builder);
