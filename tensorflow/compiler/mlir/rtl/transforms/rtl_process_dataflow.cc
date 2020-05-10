@@ -3,7 +3,7 @@
 #include "llvm/ADT/SmallVector.h"  // TF:llvm-project
 #include "llvm/ADT/Twine.h"  // TF:llvm-project
 #include "llvm/Support/Debug.h"  // TF:llvm-project
-#include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/ScopedPrinter.h"  // TF:llvm-project
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
@@ -137,8 +137,9 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           sourceOp = static_cast<BlockArgument&>(operand).getOwner()->getParentOp();
           break;
       }
-      FlatSymbolRefAttr attr = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
-      lifted.setArgAttr(index, "rtl.source", attr);
+      FlatSymbolRefAttr funcSymbol = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
+      Source source = Source::get(funcSymbol, op.getContext());
+      lifted.setArgAttr(index, "rtl.source", source);
     }
 
     // compute valid signal for results

@@ -16,6 +16,11 @@ class RTL_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<RTL_Dialect, mnemonic, traits> {
 }
 
+// attributes
+
+def RTL_Source : StructAttr<"Source", RTL_Dialect,
+    [StructFieldAttr<"func", FlatSymbolRefAttr>]>;
+
 // types
 
 def RTL_ControlType : AnyTypeOf<

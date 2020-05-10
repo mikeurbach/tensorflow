@@ -8,6 +8,9 @@
 #include "tensorflow/compiler/mlir/rtl/ir/rtl_ops.h"
 
 namespace mlir {
+
+#include "tensorflow/compiler/mlir/rtl/ir/rtl_structs.h.inc"
+
 namespace rtl {
 
 class RTLDialect : public Dialect {

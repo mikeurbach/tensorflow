@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 # provide the path to a Tensorflow 2 saved model as a command line argument
 
+source .venv/bin/activate && \
 bazel build -c dbg \
   //tensorflow/compiler/mlir:tf-mlir-translate \
   //tensorflow/compiler/mlir:tf-opt \

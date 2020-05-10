@@ -22,6 +22,8 @@ gentbl(
     tbl_outs = [
         ("-gen-op-decls", "ir/rtl_ops.h.inc"),
         ("-gen-op-defs", "ir/rtl_ops.cc.inc"),
+        ("-gen-struct-attr-decls", "ir/rtl_structs.h.inc"),
+        ("-gen-struct-attr-defs", "ir/rtl_structs.cc.inc"),
     ],
     td_srcs = [
         "@llvm-project//mlir:OpBaseTdFiles",

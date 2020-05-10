@@ -1,6 +1,9 @@
 #include "tensorflow/compiler/mlir/rtl/ir/rtl_ops.h"
 
 namespace mlir {
+
+#include "tensorflow/compiler/mlir/rtl/ir/rtl_structs.cc.inc"
+
 namespace rtl {
 
 #define GET_OP_CLASSES
