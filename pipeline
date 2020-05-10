@@ -2,7 +2,7 @@
 
 # provide the path to a Tensorflow 2 saved model as a command line argument
 
-bazel build \
+bazel build -c dbg \
   //tensorflow/compiler/mlir:tf-mlir-translate \
   //tensorflow/compiler/mlir:tf-opt \
   //tensorflow/compiler/mlir/xla:xla-opt \
