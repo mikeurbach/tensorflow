@@ -127,21 +127,28 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       // track the source as an arg attribute
       Operation *sourceOp;
       StringAttr sourceKind;
+      IntegerAttr sourceIndex;
       Value operand = op.getOperand(i);
       switch(operand.getKind()) {
         case mlir::Value::Kind::OpResult0:
         case mlir::Value::Kind::OpResult1:
-        case mlir::Value::Kind::TrailingOpResult:
-          sourceOp = operand.getDefiningOp();
+        case mlir::Value::Kind::TrailingOpResult: {
+          mlir::OpResult opResult = static_cast<OpResult&>(operand);
+          sourceOp = opResult.getDefiningOp();
           sourceKind = builder.getStringAttr("RESULT");
+          sourceIndex = builder.getI32IntegerAttr(opResult.getResultNumber());
           break;
-        case mlir::Value::Kind::BlockArgument:
-          sourceOp = static_cast<BlockArgument&>(operand).getOwner()->getParentOp();
+        }
+        case mlir::Value::Kind::BlockArgument: {
+          mlir::BlockArgument blockArgument = static_cast<BlockArgument&>(operand);
+          sourceOp = blockArgument.getOwner()->getParentOp();
           sourceKind = builder.getStringAttr("ARGUMENT");
+          sourceIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber());
           break;
+        }
       }
       FlatSymbolRefAttr funcSymbol = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
-      Source source = Source::get(funcSymbol, sourceKind, op.getContext());
+      Source source = Source::get(funcSymbol, sourceKind, sourceIndex, op.getContext());
       lifted.setArgAttr(index, "rtl.source", source);
     }
 

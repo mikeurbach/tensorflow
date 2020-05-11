@@ -24,7 +24,8 @@ def RTL_SourceKind : StrEnumAttr<"SourceKind", "which kind of source", [
 
 def RTL_Source : StructAttr<"Source", RTL_Dialect, [
     StructFieldAttr<"func", FlatSymbolRefAttr>,
-    StructFieldAttr<"kind", RTL_SourceKind>]>;
+    StructFieldAttr<"kind", RTL_SourceKind>,
+    StructFieldAttr<"index", I32Attr>,]>;
 
 // types
 
