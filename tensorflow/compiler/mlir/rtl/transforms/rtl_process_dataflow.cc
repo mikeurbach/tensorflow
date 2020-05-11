@@ -126,19 +126,22 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
       // track the source as an arg attribute
       Operation *sourceOp;
+      StringAttr sourceKind;
       Value operand = op.getOperand(i);
       switch(operand.getKind()) {
         case mlir::Value::Kind::OpResult0:
         case mlir::Value::Kind::OpResult1:
         case mlir::Value::Kind::TrailingOpResult:
           sourceOp = operand.getDefiningOp();
+          sourceKind = builder.getStringAttr("RESULT");
           break;
         case mlir::Value::Kind::BlockArgument:
           sourceOp = static_cast<BlockArgument&>(operand).getOwner()->getParentOp();
+          sourceKind = builder.getStringAttr("ARGUMENT");
           break;
       }
       FlatSymbolRefAttr funcSymbol = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
-      Source source = Source::get(funcSymbol, op.getContext());
+      Source source = Source::get(funcSymbol, sourceKind, op.getContext());
       lifted.setArgAttr(index, "rtl.source", source);
     }
 

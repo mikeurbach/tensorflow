@@ -18,8 +18,13 @@ class RTL_Op<string mnemonic, list<OpTrait> traits = []>
 
 // attributes
 
-def RTL_Source : StructAttr<"Source", RTL_Dialect,
-    [StructFieldAttr<"func", FlatSymbolRefAttr>]>;
+def RTL_SourceKind : StrEnumAttr<"SourceKind", "which kind of source", [
+    StrEnumAttrCase<"RESULT">,
+    StrEnumAttrCase<"ARGUMENT">,]>;
+
+def RTL_Source : StructAttr<"Source", RTL_Dialect, [
+    StructFieldAttr<"func", FlatSymbolRefAttr>,
+    StructFieldAttr<"kind", RTL_SourceKind>]>;
 
 // types
 
