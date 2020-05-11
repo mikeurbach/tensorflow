@@ -124,32 +124,44 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       unsigned index = i * 2;
       operation->setOperand(i, entry->getArgument(index));
 
-      // track the source as an arg attribute
-      Operation *sourceOp;
+      // find the source function, kind, and index
+      FlatSymbolRefAttr sourceFunc;
       StringAttr sourceKind;
-      IntegerAttr sourceIndex;
+      IntegerAttr sourceDataIndex;
+      IntegerAttr sourceValidIndex;
       Value operand = op.getOperand(i);
       switch(operand.getKind()) {
         case mlir::Value::Kind::OpResult0:
         case mlir::Value::Kind::OpResult1:
         case mlir::Value::Kind::TrailingOpResult: {
+          // source is the result of an operation
           mlir::OpResult opResult = static_cast<OpResult&>(operand);
-          sourceOp = opResult.getDefiningOp();
+          Operation *sourceOp = opResult.getDefiningOp();
+          sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
           sourceKind = builder.getStringAttr("RESULT");
-          sourceIndex = builder.getI32IntegerAttr(opResult.getResultNumber());
+          sourceDataIndex = builder.getI32IntegerAttr(opResult.getResultNumber());
+          sourceValidIndex = builder.getI32IntegerAttr(opResult.getResultNumber() + 1);
           break;
         }
         case mlir::Value::Kind::BlockArgument: {
+          // source is the argument to the top level function
           mlir::BlockArgument blockArgument = static_cast<BlockArgument&>(operand);
-          sourceOp = blockArgument.getOwner()->getParentOp();
+          Operation *sourceOp = blockArgument.getOwner()->getParentOp();
+          sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
           sourceKind = builder.getStringAttr("ARGUMENT");
-          sourceIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber());
+          sourceDataIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber());
+          sourceValidIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber() + 1);
           break;
         }
       }
-      FlatSymbolRefAttr funcSymbol = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
-      Source source = Source::get(funcSymbol, sourceKind, sourceIndex, op.getContext());
-      lifted.setArgAttr(index, "rtl.source", source);
+
+      // save the data source
+      Source dataSource = Source::get(sourceFunc, sourceKind, sourceDataIndex, op.getContext());
+      lifted.setArgAttr(index, "rtl.source", dataSource);
+
+      // save the valid source
+      Source validSource = Source::get(sourceFunc, sourceKind, sourceValidIndex, op.getContext());
+      lifted.setArgAttr(index + 1, "rtl.source", validSource);
     }
 
     // compute valid signal for results
