@@ -1,5 +1,3 @@
 source .venv/bin/activate
 
-dataflow_tests=$(bazel query 'kind(test, //tensorflow/compiler/mlir/dataflow/tests:*)')
-
-bazel test $dataflow_tests
+bazel test -c dbg $(bazel query 'kind(test, //tensorflow/compiler/mlir/dataflow/tests:*)')

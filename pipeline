@@ -4,12 +4,22 @@
 
 source .venv/bin/activate
 
+if [[ ! -f ./bazel-bin/tensorflow/compiler/mlir/tf-mlir-translate ]]; then
+    bazel build -c dbg //tensorflow/compiler/mlir:tf-mlir-translate
+fi
+
+if [[ ! -f ./bazel-bin/tensorflow/compiler/mlir/tf-opt ]]; then
+    bazel build -c dbg //tensorflow/compiler/mlir:tf-opt
+fi
+
+if [[ ! -f ./bazel-bin/tensorflow/compiler/mlir/xla/xla-opt ]]; then
+    bazel build -c dbg //tensorflow/compiler/mlir/xla:xla-opt
+fi
+
 bazel build -c dbg \
-  //tensorflow/compiler/mlir:tf-mlir-translate \
-  //tensorflow/compiler/mlir:tf-opt \
-  //tensorflow/compiler/mlir/xla:xla-opt \
   //tensorflow/compiler/mlir/dataflow:dataflow-opt \
-  //tensorflow/compiler/mlir/rtl:rtl-opt &&
+  //tensorflow/compiler/mlir/rtl:rtl-opt
+
 bazel-bin/tensorflow/compiler/mlir/tf-mlir-translate \
   -savedmodel-objectgraph-to-mlir \
   $1 |
