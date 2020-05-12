@@ -62,15 +62,15 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   void liftUnitRateOp(dataflow::UnitRateOp op, ModuleOp parentModule) {
     LLVM_DEBUG(logger.startLine() << "lifting " << op.getOperationName() << "\n");
 
-    Operation &inner = op.body().front().front();
+    Operation &operation = *op.getOperation();
 
-    FunctionType liftedType = liftedFunctionType(inner);
+    FunctionType liftedType = liftedFunctionType(operation);
 
-    std::string liftedName = liftedFunctionName(*op.getOperation());
+    std::string liftedName = liftedFunctionName(operation);
 
     FuncOp lifted = FuncOp::create(op.getLoc(), liftedName, liftedType);
 
-    configureLiftedFunction(inner, lifted);
+    configureLiftedFunction(op, lifted);
 
     parentModule.push_back(lifted.getOperation());
   }
@@ -110,7 +110,11 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     return name;
   }
 
-  void configureLiftedFunction(Operation &op, FuncOp lifted) {
+  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted) {
+    Operation &op = *baseOp.getOperation();
+
+    Operation &inner = baseOp.body().front().front();
+
     Block *entry = lifted.addEntryBlock();
 
     OpBuilder builder(entry->getParent());
@@ -118,7 +122,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     // wire up data signals to wrapped operation
-    Operation *operation = builder.clone(op);
+    Operation *operation = builder.clone(inner);
     for(unsigned i = 0; i < op.getNumOperands(); ++i) {
       // index to the data signal in the arguments
       unsigned index = i * 2;
@@ -139,8 +143,10 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           Operation *sourceOp = opResult.getDefiningOp();
           sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
           sourceKind = builder.getStringAttr("RESULT");
-          sourceDataIndex = builder.getI32IntegerAttr(opResult.getResultNumber());
-          sourceValidIndex = builder.getI32IntegerAttr(opResult.getResultNumber() + 1);
+          // every source operand will have an output for ready signal, so index past those
+          unsigned offset = sourceOp->getNumOperands();
+          sourceDataIndex = builder.getI32IntegerAttr(offset + opResult.getResultNumber());
+          sourceValidIndex = builder.getI32IntegerAttr(offset + opResult.getResultNumber() + 1);
           break;
         }
         case mlir::Value::Kind::BlockArgument: {

@@ -42,6 +42,10 @@ def Dataflow_UnitRateOp : Dataflow_Op<"unit_rate",
     actors in parallel.
   }];
 
+  let arguments = (ins
+    Dataflow_VariadicDataType:$args
+  );
+
   let results = (outs
     Dataflow_DataType:$result
   );

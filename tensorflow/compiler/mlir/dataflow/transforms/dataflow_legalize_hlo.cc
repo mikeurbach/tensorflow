@@ -25,18 +25,22 @@ class WrapUnitRateOp : public OpRewritePattern<OpTy> {
 
     // create a new unit rate op
     auto unitRateOp = rewriter.create<UnitRateOp>(
-        op.getLoc(), op.getType());
+        op.getLoc(), op.getType(), operation->getOperands(),
+        SmallVector<NamedAttribute, 0>());
 
     // wrap the inner op within the unit rate's body
     {
       OpBuilder::InsertionGuard guard(rewriter);
 
       Block *block = rewriter.createBlock(&unitRateOp.body());
+      for(auto operand : operation->getOperands()) {
+        block->addArgument(operand.getType());
+      }
 
       Location loc = unitRateOp.body().getLoc();
 
       auto innerOp = rewriter.create<OpTy>(
-          loc, op.getType(), operation->getOperands(), op.getAttrs());
+          loc, op.getType(), block->getArguments(), op.getAttrs());
 
       rewriter.create<ReturnOp>(loc, innerOp.getResult());
     }
