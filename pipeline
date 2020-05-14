@@ -18,8 +18,7 @@ fi
 
 bazel build -c dbg \
   //tensorflow/compiler/mlir/dataflow:dataflow-opt \
-  //tensorflow/compiler/mlir/rtl:rtl-opt
-
+  //tensorflow/compiler/mlir/rtl:rtl-opt && \
 bazel-bin/tensorflow/compiler/mlir/tf-mlir-translate \
   -savedmodel-objectgraph-to-mlir \
   $1 |

@@ -121,14 +121,14 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
-    // wire up data signals to wrapped operation
+    // wire up data and valid signals to wrapped operation
     Operation *operation = builder.clone(inner);
     for(unsigned i = 0; i < op.getNumOperands(); ++i) {
       // index to the data signal in the arguments
-      unsigned index = i * 2;
-      operation->setOperand(i, entry->getArgument(index));
+      unsigned dataIndex = i * 2;
+      operation->setOperand(i, entry->getArgument(dataIndex));
 
-      // find the source function, kind, and index
+      // find the source for every data signal
       FlatSymbolRefAttr sourceFunc;
       StringAttr sourceKind;
       IntegerAttr sourceDataIndex;
@@ -150,7 +150,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           break;
         }
         case mlir::Value::Kind::BlockArgument: {
-          // source is the argument to the top level function
+          // source is an input to the top level function
           mlir::BlockArgument blockArgument = static_cast<BlockArgument&>(operand);
           Operation *sourceOp = blockArgument.getOwner()->getParentOp();
           sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
@@ -163,11 +163,40 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
       // save the data source
       Source dataSource = Source::get(sourceFunc, sourceKind, sourceDataIndex, op.getContext());
-      lifted.setArgAttr(index, "rtl.source", dataSource);
+      lifted.setArgAttr(dataIndex, "rtl.source", dataSource);
 
       // save the valid source
       Source validSource = Source::get(sourceFunc, sourceKind, sourceValidIndex, op.getContext());
-      lifted.setArgAttr(index + 1, "rtl.source", validSource);
+      lifted.setArgAttr(dataIndex + 1, "rtl.source", validSource);
+    }
+
+    // wire up ready signals
+    for(unsigned i = 0; i < op.getNumResults(); ++i) {
+      // get the single use of this result
+      OpResult result = op.getResult(i);
+      OpOperand &use = *result.use_begin();
+      Operation &useOp = *use.getOwner();
+
+      // find the source for every result ready signal
+      StringAttr sourceKind;
+      FlatSymbolRefAttr sourceFunc;
+      IntegerAttr sourceIndex;
+      if(useOp.getName() == OperationName("std.return", op.getContext())) {
+        // source is an output to the top level function
+        sourceKind = builder.getStringAttr("ARGUMENT");
+        Operation &useOpParent = *useOp.getParentOp();
+        sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(useOpParent));
+        sourceIndex = builder.getI32IntegerAttr(useOpParent.getNumOperands() - useOpParent.getNumResults());
+      } else {
+        // source is the result of an operation
+        sourceKind = builder.getStringAttr("RESULT");
+        sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(useOp));
+        sourceIndex = builder.getI32IntegerAttr(use.getOperandNumber());
+      }
+
+      // save the ready source
+      Source readySource = Source::get(sourceFunc, sourceKind, sourceIndex, op.getContext());
+      lifted.setArgAttr(entry->getNumArguments() - op.getNumResults() + i, "rtl.source", readySource);
     }
 
     // compute valid signal for results
@@ -203,7 +232,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     if(op.getNumOperands() > 0) {
       // compute ready signal for operands
       SmallVector<Value, 1> resultsReady;
-      for(unsigned i = entry->getNumArguments() - 1, j = 0; j < op.getNumResults(); --i, ++j) {
+      for(unsigned i = entry->getNumArguments() - op.getNumResults(); i < entry->getNumArguments(); ++i) {
         // index to the ready signals at the end of the arguments
         resultsReady.push_back(entry->getArgument(i));
       }
