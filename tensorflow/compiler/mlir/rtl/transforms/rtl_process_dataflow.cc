@@ -64,7 +64,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     Operation &operation = *op.getOperation();
 
-    FunctionType liftedType = liftedFunctionType(operation);
+    FunctionType liftedType = liftedFunctionType(
+        operation.getOperandTypes(), operation.getResultTypes());
 
     std::string liftedName = liftedFunctionName(operation);
 
@@ -75,22 +76,20 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     parentModule.push_back(lifted.getOperation());
   }
 
-  FunctionType liftedFunctionType(Operation &op) {
-    Builder builder(op.getContext());
-
+  FunctionType liftedFunctionType(TypeRange operandTypes, TypeRange resultTypes) {
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     SmallVector<Type, 2> inputTypes;
     SmallVector<Type, 2> outputTypes;
 
-    for(auto operand : op.getOperands()) {
-      inputTypes.push_back(operand.getType()); // input for the operand data
+    for(Type operandType : operandTypes) {
+      inputTypes.push_back(operandType); // input for the operand data
       inputTypes.push_back(bitType); // input for the operand valid
       outputTypes.push_back(bitType); // output for the operand ready
     }
 
-    for(auto result : op.getResults()) {
-      outputTypes.push_back(result.getType()); // output for the result data
+    for(Type resultType : resultTypes) {
+      outputTypes.push_back(resultType); // output for the result data
       outputTypes.push_back(bitType); // output for the result valid
       inputTypes.push_back(bitType); // input for the result ready
     }
