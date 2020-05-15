@@ -49,34 +49,38 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
+    OpBuilder builder = OpBuilder(module.getBody()->getTerminator());
+
     module.walk(
         [&](FuncOp function) {
           function.walk(
               [&](dataflow::UnitRateOp op) {
-                liftUnitRateOp(op, module);
+                liftUnitRateOp(op, builder);
               });
         });
   }
 
  private:
-  void liftUnitRateOp(dataflow::UnitRateOp op, ModuleOp parentModule) {
+  void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder) {
     LLVM_DEBUG(logger.startLine() << "lifting " << op.getOperationName() << "\n");
 
     Operation &operation = *op.getOperation();
 
     FunctionType liftedType = liftedFunctionType(
-        operation.getOperandTypes(), operation.getResultTypes());
+        builder, operation.getOperandTypes(), operation.getResultTypes());
 
     std::string liftedName = liftedFunctionName(operation);
 
-    FuncOp lifted = FuncOp::create(op.getLoc(), liftedName, liftedType);
+    ArrayRef<NamedAttribute> liftedAttrs = {};
 
-    configureLiftedFunction(op, lifted);
+    FuncOp lifted = builder.create<FuncOp>(
+        op.getLoc(), liftedName, liftedType, liftedAttrs);
 
-    parentModule.push_back(lifted.getOperation());
+    configureLiftedFunction(op, lifted, builder);
   }
 
-  FunctionType liftedFunctionType(TypeRange operandTypes, TypeRange resultTypes) {
+  FunctionType liftedFunctionType(
+      Builder builder, TypeRange operandTypes, TypeRange resultTypes) {
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
     SmallVector<Type, 2> inputTypes;
@@ -109,14 +113,15 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     return name;
   }
 
-  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted) {
+  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted, OpBuilder builder) {
     Operation &op = *baseOp.getOperation();
 
     Operation &inner = baseOp.body().front().front();
 
     Block *entry = lifted.addEntryBlock();
 
-    OpBuilder builder(entry->getParent());
+    OpBuilder::InsertionGuard entryInsertionGuard(builder);
+    builder.setInsertionPointToStart(entry);
 
     RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
 
