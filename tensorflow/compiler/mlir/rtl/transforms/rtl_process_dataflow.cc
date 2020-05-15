@@ -57,10 +57,26 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
               [&](dataflow::UnitRateOp op) {
                 liftUnitRateOp(op, builder);
               });
+
+          liftMainFunc(function, builder);
         });
   }
 
  private:
+  void liftMainFunc(FuncOp function, OpBuilder builder) {
+    Block &body = function.getCallableRegion()->front();
+
+    FunctionType liftedType = liftedFunctionType(
+        builder, function.getType().getInputs(), function.getType().getResults());
+
+    std::string liftedName = MAIN_FUNCTION_NAME;
+
+    ArrayRef<NamedAttribute> liftedAttrs = {};
+
+    FuncOp main = builder.create<FuncOp>(
+        function.getLoc(), liftedName, liftedType, liftedAttrs);
+  }
+
   void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder) {
     LLVM_DEBUG(logger.startLine() << "lifting " << op.getOperationName() << "\n");
 
@@ -157,10 +173,11 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           // source is an input to the top level function
           mlir::BlockArgument blockArgument = static_cast<BlockArgument&>(operand);
           Operation *sourceOp = blockArgument.getOwner()->getParentOp();
-          sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
+          sourceFunc = builder.getSymbolRefAttr(MAIN_FUNCTION_NAME);
           sourceKind = builder.getStringAttr("ARGUMENT");
-          sourceDataIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber());
-          sourceValidIndex = builder.getI32IntegerAttr(blockArgument.getArgNumber() + 1);
+          unsigned idx = blockArgument.getArgNumber() * 2;
+          sourceDataIndex = builder.getI32IntegerAttr(idx);
+          sourceValidIndex = builder.getI32IntegerAttr(idx + 1);
           break;
         }
       }
@@ -188,9 +205,11 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       if(useOp.getName() == OperationName("std.return", op.getContext())) {
         // source is an output to the top level function
         sourceKind = builder.getStringAttr("ARGUMENT");
-        Operation &useOpParent = *useOp.getParentOp();
-        sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(useOpParent));
-        sourceIndex = builder.getI32IntegerAttr(useOpParent.getNumOperands() - useOpParent.getNumResults());
+        sourceFunc = builder.getSymbolRefAttr(MAIN_FUNCTION_NAME);
+        FuncOp parent = static_cast<FuncOp>(useOp.getParentOp());
+        FunctionType parentType = parent.getType();
+        unsigned idx = ((parentType.getNumInputs() * 2) + 1) - parentType.getNumResults() + i;
+        sourceIndex = builder.getI32IntegerAttr(idx);
       } else {
         // source is the result of an operation
         sourceKind = builder.getStringAttr("RESULT");
@@ -258,6 +277,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   }
 
   llvm::ScopedPrinter logger{llvm::dbgs()};
+
+  inline static const std::string MAIN_FUNCTION_NAME = "main";
 };
 
 static void pipelineBuilder(OpPassManager &passManager) {
