@@ -1,9 +1,11 @@
 #include <numeric>
+#include <unordered_map>
 #include "llvm/ADT/SmallString.h"  // TF:llvm-project
 #include "llvm/ADT/SmallVector.h"  // TF:llvm-project
 #include "llvm/ADT/Twine.h"  // TF:llvm-project
 #include "llvm/Support/Debug.h"  // TF:llvm-project
 #include "llvm/Support/ScopedPrinter.h"  // TF:llvm-project
+#include "llvm/Support/raw_ostream.h"  // TF:llvm-project
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
@@ -46,23 +48,29 @@ class LegalizeDataflow : public PassWrapper<LegalizeDataflow, FunctionPass> {
 };
 
 class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<ModuleOp>> {
+ public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
     OpBuilder builder = OpBuilder(module.getBody()->getTerminator());
 
+    WiringTable wiringTable;
+
     module.walk(
         [&](FuncOp function) {
           function.walk(
               [&](dataflow::UnitRateOp op) {
-                liftUnitRateOp(op, builder);
+                liftUnitRateOp(op, builder, &wiringTable);
               });
+
+          LLVM_DEBUG(logger.startLine() << wiringTable.print() << "\n");
 
           liftMainFunc(function, builder);
         });
   }
-
  private:
+  class WiringTable;
+
   void liftMainFunc(FuncOp function, OpBuilder builder) {
     Block &body = function.getCallableRegion()->front();
 
@@ -77,7 +85,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
         function.getLoc(), liftedName, liftedType, liftedAttrs);
   }
 
-  void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder) {
+  void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder, WiringTable *wiringTable) {
     LLVM_DEBUG(logger.startLine() << "lifting " << op.getOperationName() << "\n");
 
     Operation &operation = *op.getOperation();
@@ -92,7 +100,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     FuncOp lifted = builder.create<FuncOp>(
         op.getLoc(), liftedName, liftedType, liftedAttrs);
 
-    configureLiftedFunction(op, lifted, builder);
+    configureLiftedFunction(op, lifted, builder, wiringTable);
   }
 
   FunctionType liftedFunctionType(
@@ -129,7 +137,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     return name;
   }
 
-  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted, OpBuilder builder) {
+  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted, OpBuilder builder,
+                               WiringTable *wiringTable) {
     Operation &op = *baseOp.getOperation();
 
     Operation &inner = baseOp.body().front().front();
@@ -149,10 +158,10 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       operation->setOperand(i, entry->getArgument(dataIndex));
 
       // find the source for every data signal
-      FlatSymbolRefAttr sourceFunc;
-      StringAttr sourceKind;
-      IntegerAttr sourceDataIndex;
-      IntegerAttr sourceValidIndex;
+      std::string sourceFunc;
+      WiringTable::PortType sourceKind;
+      unsigned sourceDataIndex;
+      unsigned sourceValidIndex;
       Value operand = op.getOperand(i);
       switch(operand.getKind()) {
         case mlir::Value::Kind::OpResult0:
@@ -161,34 +170,36 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           // source is the result of an operation
           mlir::OpResult opResult = static_cast<OpResult&>(operand);
           Operation *sourceOp = opResult.getDefiningOp();
-          sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(*sourceOp));
-          sourceKind = builder.getStringAttr("RESULT");
+          sourceFunc = liftedFunctionName(*sourceOp);
+          sourceKind = WiringTable::PortType::OUTPUT;
           // every source operand will have an output for ready signal, so index past those
           unsigned offset = sourceOp->getNumOperands();
-          sourceDataIndex = builder.getI32IntegerAttr(offset + opResult.getResultNumber());
-          sourceValidIndex = builder.getI32IntegerAttr(offset + opResult.getResultNumber() + 1);
+          sourceDataIndex = offset + opResult.getResultNumber();
+          sourceValidIndex = offset + opResult.getResultNumber() + 1;
           break;
         }
         case mlir::Value::Kind::BlockArgument: {
           // source is an input to the top level function
           mlir::BlockArgument blockArgument = static_cast<BlockArgument&>(operand);
           Operation *sourceOp = blockArgument.getOwner()->getParentOp();
-          sourceFunc = builder.getSymbolRefAttr(MAIN_FUNCTION_NAME);
-          sourceKind = builder.getStringAttr("ARGUMENT");
+          sourceFunc = MAIN_FUNCTION_NAME;
+          sourceKind = WiringTable::PortType::INPUT;
           unsigned idx = blockArgument.getArgNumber() * 2;
-          sourceDataIndex = builder.getI32IntegerAttr(idx);
-          sourceValidIndex = builder.getI32IntegerAttr(idx + 1);
+          sourceDataIndex = idx;
+          sourceValidIndex = idx + 1;
           break;
         }
       }
 
       // save the data source
-      Source dataSource = Source::get(sourceFunc, sourceKind, sourceDataIndex, op.getContext());
-      lifted.setArgAttr(dataIndex, "rtl.source", dataSource);
+      wiringTable->addWire(
+          sourceFunc, sourceKind, sourceDataIndex,
+          SymbolTable::getSymbolName(lifted).str(), WiringTable::PortType::INPUT, dataIndex);
 
       // save the valid source
-      Source validSource = Source::get(sourceFunc, sourceKind, sourceValidIndex, op.getContext());
-      lifted.setArgAttr(dataIndex + 1, "rtl.source", validSource);
+      wiringTable->addWire(
+          sourceFunc, sourceKind, sourceValidIndex,
+          SymbolTable::getSymbolName(lifted).str(), WiringTable::PortType::INPUT, dataIndex + 1);
     }
 
     // wire up ready signals
@@ -199,27 +210,28 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       Operation &useOp = *use.getOwner();
 
       // find the source for every result ready signal
-      StringAttr sourceKind;
-      FlatSymbolRefAttr sourceFunc;
-      IntegerAttr sourceIndex;
+      std::string sourceFunc;
+      WiringTable::PortType sourceKind;
+      unsigned sourceIndex;
       if(useOp.getName() == OperationName("std.return", op.getContext())) {
         // source is an output to the top level function
-        sourceKind = builder.getStringAttr("ARGUMENT");
-        sourceFunc = builder.getSymbolRefAttr(MAIN_FUNCTION_NAME);
+        sourceFunc = MAIN_FUNCTION_NAME;
+        sourceKind = WiringTable::PortType::INPUT;
         FuncOp parent = static_cast<FuncOp>(useOp.getParentOp());
         FunctionType parentType = parent.getType();
-        unsigned idx = ((parentType.getNumInputs() * 2) + 1) - parentType.getNumResults() + i;
-        sourceIndex = builder.getI32IntegerAttr(idx);
+        sourceIndex = ((parentType.getNumInputs() * 2) + 1) - parentType.getNumResults() + i;
       } else {
         // source is the result of an operation
-        sourceKind = builder.getStringAttr("RESULT");
-        sourceFunc = builder.getSymbolRefAttr(liftedFunctionName(useOp));
-        sourceIndex = builder.getI32IntegerAttr(use.getOperandNumber());
+        sourceFunc = liftedFunctionName(useOp);
+        sourceKind = WiringTable::PortType::OUTPUT;
+        sourceIndex = use.getOperandNumber();
       }
 
       // save the ready source
-      Source readySource = Source::get(sourceFunc, sourceKind, sourceIndex, op.getContext());
-      lifted.setArgAttr(entry->getNumArguments() - op.getNumResults() + i, "rtl.source", readySource);
+      unsigned readySourceNumber = entry->getNumArguments() - op.getNumResults() + i;
+      wiringTable->addWire(
+          sourceFunc, sourceKind, sourceIndex,
+          SymbolTable::getSymbolName(lifted).str(), WiringTable::PortType::INPUT, readySourceNumber);
     }
 
     // compute valid signal for results
@@ -275,6 +287,65 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     builder.create<ReturnOp>(op.getLoc(), results);
   }
+
+  class WiringTable {
+   public:
+    enum class PortType { INPUT, OUTPUT };
+
+    WiringTable() {
+      this->wireLookup = wireLookupType();
+    }
+
+    void addWire(std::string sourceSymbol, PortType sourceType, unsigned sourceNumber,
+                 std::string sinkSymbol, PortType sinkType, unsigned sinkNumber) {
+      // generate a wire name
+      std::string wireName = "";
+      wireName += sourceSymbol + "_";
+      wireName += portTypeName(sourceType) + "_";
+      wireName += std::to_string(sourceNumber) + "_to_";
+      wireName += sinkSymbol + "_";
+      wireName += portTypeName(sinkType) + "_";
+      wireName += std::to_string(sinkNumber);
+
+      // track for source
+      wireLookup[sourceSymbol][sourceType][sourceNumber] = wireName;
+
+      // track for sink
+      wireLookup[sinkSymbol][sinkType][sinkNumber] = wireName;
+    }
+
+    std::string print() {
+      std::string out = "WiringTable:\n";
+      for(auto funcIt = wireLookup.begin(); funcIt != wireLookup.end(); ++funcIt) {
+        out += funcIt->first + "\n";
+        for(auto portTypeIt = funcIt->second.begin();
+            portTypeIt != funcIt->second.end(); ++portTypeIt) {
+          out += "  " + portTypeName(portTypeIt->first) + "\n";
+          for(auto portIt = portTypeIt->second.begin();
+              portIt != portTypeIt->second.end(); ++portIt) {
+            out += "    " + std::to_string(portIt->first) + ": " + portIt->second + "\n";
+          }
+        }
+        out += "\n";
+      }
+      return out;
+    }
+   private:
+    // func symbol + port type + port number -> wire name
+    using wireLookupType =
+      std::unordered_map<
+        std::string,
+        std::unordered_map<
+          PortType,
+          std::unordered_map<
+            unsigned, std::string>>>;
+
+    wireLookupType wireLookup;
+
+    std::string portTypeName(PortType portType) {
+      return portType == PortType::INPUT ? "in" : "out";
+    }
+  };
 
   llvm::ScopedPrinter logger{llvm::dbgs()};
 
