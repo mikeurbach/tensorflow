@@ -63,9 +63,9 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
                 liftUnitRateOp(op, builder, &wiringTable);
               });
 
-          connectReturnOp(function, builder, &wiringTable);
+          connectMainPorts(function, builder, &wiringTable);
 
-          buildMainFunc(function, builder, wiringTable);
+          buildMainBody(function, builder, wiringTable);
         });
   }
  private:
@@ -128,7 +128,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     }
   };
 
-  void buildMainFunc(FuncOp function, OpBuilder builder, WiringTable wiringTable) {
+  void buildMainBody(FuncOp function, OpBuilder builder, WiringTable wiringTable) {
     LLVM_DEBUG(logger.startLine() << wiringTable.print() << "\n");
 
     // create top-level main function
@@ -143,12 +143,27 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
         function.getLoc(), liftedName, liftedType, liftedAttrs);
   }
 
-  void connectReturnOp(FuncOp function, OpBuilder builder, WiringTable *wiringTable) {
+  void connectMainPorts(FuncOp function, OpBuilder builder, WiringTable *wiringTable) {
     Block &body = function.front();
+
+    // find input uses
+    for(unsigned i = 0; i < body.getNumArguments(); ++i) {
+      // get the single use of this result
+      BlockArgument arg = body.getArgument(i);
+      OpOperand &use = *arg.use_begin();
+      Operation &useOp = *use.getOwner();
+
+      // connect input use ready signals to main function's ready outputs
+      wiringTable->addWire(
+          liftedFunctionName(useOp), WiringTable::PortType::OUTPUT, use.getOperandNumber(),
+          MAIN_FUNCTION_NAME, WiringTable::PortType::OUTPUT, i);
+    }
+
+    // find return operation
     Operation &ret = body.back();
     unsigned offset = function.getType().getNumInputs();
 
-    // connect final result(s) to main function's outputs
+    // connect returned result(s) and valid signals to main function's data and valid outputs
     for(unsigned i = 0; i < ret.getNumOperands(); ++i) {
       trackValueSource(
           ret.getOperand(i),
