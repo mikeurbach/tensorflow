@@ -122,11 +122,20 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       return wireTypes[wireName];
     }
 
-    std::unordered_map<
-      PortType,
-      std::unordered_map<
-        unsigned, std::string>> lookupFunc(std::string funcName) {
-      return wireLookup[funcName];
+    llvm::StringSet<> getFuncs() {
+      llvm::StringSet<> funcs;
+
+      for(auto funcIt = wireLookup.begin();
+          funcIt != wireLookup.end(); ++funcIt) {
+        funcs.insert(funcIt->first);
+      }
+
+      return funcs;
+    }
+
+    std::unordered_map<unsigned, std::string> lookupFuncPorts(
+        std::string funcName, PortType portType) {
+      return wireLookup.at(funcName).at(portType);
     }
 
     std::string print() {
@@ -185,27 +194,50 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     // insert every wire into the top-level function
     llvm::StringSet<> wireSet = wiringTable.getWires();
-    std::unordered_map<std::string, WireOp> wireMap;
+    std::unordered_map<std::string, Value> wireMap;
     for(auto it = wireSet.begin(); it != wireSet.end(); ++it) {
       StringRef wireName = it->getKey();
       Type wireType = wiringTable.getWireType(wireName.str());
       WireOp wireOp = builder.create<WireOp>(main.getLoc(), wireType, wireName);
-      wireMap[wireName.str()] = wireOp;
+      // keep track of the result by name for return values
+      wireMap[wireName.str()] = wireOp.getResult();
     }
 
     // insert every instance into the top-level function
+    llvm::StringSet<> funcSet = wiringTable.getFuncs();
+    for(auto it = funcSet.begin(); it != funcSet.end(); ++it) {
+      StringRef funcName = it->getKey();
+      if(funcName.compare(MAIN_FUNCTION_NAME) == 0) {
+        continue;
+      }
+
+      auto funcInputs = wiringTable.lookupFuncPorts(
+          funcName.str(), WiringTable::PortType::INPUT);
+      auto funcOutputs = wiringTable.lookupFuncPorts(
+          funcName.str(), WiringTable::PortType::OUTPUT);
+
+      std::vector<FlatSymbolRefAttr> funcWires(funcInputs.size() + funcOutputs.size());
+      for(auto fi = funcInputs.begin(); fi != funcInputs.end(); ++fi) {
+        funcWires[fi->first] = builder.getSymbolRefAttr(fi->second);
+      }
+      for(auto fi = funcOutputs.begin(); fi != funcOutputs.end(); ++fi) {
+        funcWires[funcInputs.size() + fi->first] = builder.getSymbolRefAttr(fi->second);
+      }
+
+      SymbolRefAttr instantiation = builder.getSymbolRefAttr(funcName, funcWires);
+      builder.create<InstanceOp>(main.getLoc(), instantiation);
+    }
 
     // insert a return with every output wire in the top-level function
-    auto mainOutputs =
-        wiringTable.lookupFunc(MAIN_FUNCTION_NAME)[WiringTable::PortType::OUTPUT];
+    auto mainOutputs = wiringTable.lookupFuncPorts(
+        MAIN_FUNCTION_NAME, WiringTable::PortType::OUTPUT);
 
     std::vector<Value> outputWires(mainOutputs.size());
     for(auto it = mainOutputs.begin(); it != mainOutputs.end(); ++it) {
-      WireOp wireOp = wireMap[it->second];
-      outputWires[it->first] = wireOp.getResult();
+      outputWires[it->first] = wireMap[it->second];
     }
 
-    builder.create<ReturnOp>(main.getLoc(), std::vector<Value>(std::begin(outputWires), std::end(outputWires)));
+    builder.create<ReturnOp>(main.getLoc(), outputWires);
   }
 
   void connectMainPorts(FuncOp function, OpBuilder builder, WiringTable *wiringTable) {

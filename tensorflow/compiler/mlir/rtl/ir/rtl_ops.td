@@ -244,4 +244,18 @@ def RTL_WireOp : RTL_Op<"wire", [ConstantLike]> {
   );
 }
 
+def RTL_InstanceOp : RTL_Op<"instance"> {
+  let summary = [{
+    Instance op.
+  }];
+
+  let description = [{
+    An operation to represent an instance in structural HDL.
+  }];
+
+  let arguments = (ins
+    SymbolRefAttr:$instantiation
+  );
+}
+
 #endif // RTL_OPS
