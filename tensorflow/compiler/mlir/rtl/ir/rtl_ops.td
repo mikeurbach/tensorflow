@@ -16,17 +16,6 @@ class RTL_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<RTL_Dialect, mnemonic, traits> {
 }
 
-// attributes
-
-def RTL_SourceKind : StrEnumAttr<"SourceKind", "which kind of source", [
-    StrEnumAttrCase<"RESULT">,
-    StrEnumAttrCase<"ARGUMENT">,]>;
-
-def RTL_Source : StructAttr<"Source", RTL_Dialect, [
-    StructFieldAttr<"func", FlatSymbolRefAttr>,
-    StructFieldAttr<"kind", RTL_SourceKind>,
-    StructFieldAttr<"index", I32Attr>,]>;
-
 // types
 
 def RTL_ControlType : AnyTypeOf<
@@ -234,6 +223,25 @@ def RTL_XorOp : RTL_BinaryLogicalOp<"xor"> {
   let description = [{
     An operation to represent binary xor.
   }];
+}
+
+// structural ops
+def RTL_WireOp : RTL_Op<"wire", [ConstantLike]> {
+  let summary = [{
+    Wire op.
+  }];
+
+  let description = [{
+    An operation to represent a wire in structural HDL.
+  }];
+
+  let arguments = (ins
+    FlatSymbolRefAttr:$name
+  );
+
+  let results = (outs
+    RTL_DataType:$value
+  );
 }
 
 #endif // RTL_OPS

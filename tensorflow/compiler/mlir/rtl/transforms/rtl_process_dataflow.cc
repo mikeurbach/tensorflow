@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include "llvm/ADT/SmallString.h"  // TF:llvm-project
 #include "llvm/ADT/SmallVector.h"  // TF:llvm-project
+#include "llvm/ADT/StringSet.h"  // TF:llvm-project
 #include "llvm/ADT/Twine.h"  // TF:llvm-project
 #include "llvm/Support/Debug.h"  // TF:llvm-project
 #include "llvm/Support/ScopedPrinter.h"  // TF:llvm-project
@@ -75,10 +76,12 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     WiringTable() {
       this->wireLookup = wireLookupType();
+      this->wireTypes = llvm::StringMap<Type>();
     }
 
-    void addWire(std::string sourceSymbol, PortType sourceType, unsigned sourceNumber,
-                 std::string sinkSymbol, PortType sinkType, unsigned sinkNumber) {
+    void addWire(Type wireType,
+        std::string sourceSymbol, PortType sourceType, unsigned sourceNumber,
+        std::string sinkSymbol, PortType sinkType, unsigned sinkNumber) {
       // generate a wire name
       std::string wireName = "";
       wireName += sourceSymbol + "_";
@@ -93,6 +96,37 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
       // track for sink
       wireLookup[sinkSymbol][sinkType][sinkNumber] = wireName;
+
+      // track type
+      wireTypes[wireName] = wireType;
+    }
+
+    llvm::StringSet<> getWires() {
+      llvm::StringSet<> wires;
+
+      for(auto funcIt = wireLookup.begin();
+          funcIt != wireLookup.end(); ++funcIt) {
+        for(auto portTypeIt = funcIt->second.begin();
+            portTypeIt != funcIt->second.end(); ++portTypeIt) {
+          for(auto portIt = portTypeIt->second.begin();
+              portIt != portTypeIt->second.end(); ++portIt) {
+            wires.insert(portIt->second);
+          }
+        }
+      }
+
+      return wires;
+    }
+
+    Type getWireType(std::string wireName) {
+      return wireTypes[wireName];
+    }
+
+    std::unordered_map<
+      PortType,
+      std::unordered_map<
+        unsigned, std::string>> lookupFunc(std::string funcName) {
+      return wireLookup[funcName];
     }
 
     std::string print() {
@@ -123,14 +157,16 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     wireLookupType wireLookup;
 
+    llvm::StringMap<Type> wireTypes;
+
     std::string portTypeName(PortType portType) {
       return portType == PortType::INPUT ? "in" : "out";
     }
+
+    llvm::ScopedPrinter logger{llvm::dbgs()};
   };
 
   void buildMainBody(FuncOp function, OpBuilder builder, WiringTable wiringTable) {
-    LLVM_DEBUG(logger.startLine() << wiringTable.print() << "\n");
-
     // create top-level main function
     FunctionType liftedType = liftedFunctionType(
         builder, function.getType().getInputs(), function.getType().getResults());
@@ -141,6 +177,35 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     FuncOp main = builder.create<FuncOp>(
         function.getLoc(), liftedName, liftedType, liftedAttrs);
+
+    // add a body to the top-level function
+    Block *entry = main.addEntryBlock();
+    OpBuilder::InsertionGuard entryInsertionGuard(builder);
+    builder.setInsertionPointToStart(entry);
+
+    // insert every wire into the top-level function
+    llvm::StringSet<> wireSet = wiringTable.getWires();
+    std::unordered_map<std::string, WireOp> wireMap;
+    for(auto it = wireSet.begin(); it != wireSet.end(); ++it) {
+      StringRef wireName = it->getKey();
+      Type wireType = wiringTable.getWireType(wireName.str());
+      WireOp wireOp = builder.create<WireOp>(main.getLoc(), wireType, wireName);
+      wireMap[wireName.str()] = wireOp;
+    }
+
+    // insert every instance into the top-level function
+
+    // insert a return with every output wire in the top-level function
+    auto mainOutputs =
+        wiringTable.lookupFunc(MAIN_FUNCTION_NAME)[WiringTable::PortType::OUTPUT];
+
+    std::vector<Value> outputWires(mainOutputs.size());
+    for(auto it = mainOutputs.begin(); it != mainOutputs.end(); ++it) {
+      WireOp wireOp = wireMap[it->second];
+      outputWires[it->first] = wireOp.getResult();
+    }
+
+    builder.create<ReturnOp>(main.getLoc(), std::vector<Value>(std::begin(outputWires), std::end(outputWires)));
   }
 
   void connectMainPorts(FuncOp function, OpBuilder builder, WiringTable *wiringTable) {
@@ -154,7 +219,9 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       Operation &useOp = *use.getOwner();
 
       // connect input use ready signals to main function's ready outputs
+      RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
       wiringTable->addWire(
+          bitType,
           liftedFunctionName(useOp), WiringTable::PortType::OUTPUT, use.getOperandNumber(),
           MAIN_FUNCTION_NAME, WiringTable::PortType::OUTPUT, i);
     }
@@ -168,13 +235,11 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       trackValueSource(
           ret.getOperand(i),
           MAIN_FUNCTION_NAME, WiringTable::PortType::OUTPUT, offset + i,
-          wiringTable);
+          wiringTable, builder);
     }
   }
 
   void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder, WiringTable *wiringTable) {
-    LLVM_DEBUG(logger.startLine() << "lifting " << op.getOperationName() << "\n");
-
     Operation &operation = *op.getOperation();
 
     FunctionType liftedType = liftedFunctionType(
@@ -249,7 +314,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       trackValueSource(
           operand,
           SymbolTable::getSymbolName(lifted).str(), WiringTable::PortType::INPUT, dataIndex,
-          wiringTable);
+          wiringTable, builder);
     }
 
     // wire up ready signals
@@ -280,6 +345,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       // save the ready source
       unsigned readySourceNumber = entry->getNumArguments() - op.getNumResults() + i;
       wiringTable->addWire(
+          bitType,
           sourceFunc, sourceKind, sourceIndex,
           SymbolTable::getSymbolName(lifted).str(), WiringTable::PortType::INPUT, readySourceNumber);
     }
@@ -341,7 +407,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   void trackValueSource(
       Value value,
       std::string destFunc, WiringTable::PortType destKind, unsigned destIndex,
-      WiringTable *wiringTable) {
+      WiringTable *wiringTable, OpBuilder builder) {
     std::string sourceFunc;
     WiringTable::PortType sourceKind;
     unsigned sourceDataIndex;
@@ -376,11 +442,14 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
     // save the data source
     wiringTable->addWire(
+        value.getType(),
         sourceFunc, sourceKind, sourceDataIndex,
         destFunc, destKind, destIndex);
 
     // save the valid source
+    RankedTensorType bitType = RankedTensorType::get({}, builder.getI1Type());
     wiringTable->addWire(
+        bitType,
         sourceFunc, sourceKind, sourceValidIndex,
         destFunc, destKind, destIndex + 1);
   }
