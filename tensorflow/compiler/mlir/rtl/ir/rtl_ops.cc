@@ -17,5 +17,22 @@ RTLDialect::RTLDialect(MLIRContext *context)
     >();
 }
 
+unsigned ModuleOp::getNumFuncArguments() {
+  getType().getInputs().size();
+}
+
+unsigned ModuleOp::getNumFuncResults() {
+  getType().getInputs().size();
+}
+
+LogicalResult ModuleOp::verifyType() {
+  auto type = getType();
+  if (!type.isa<FunctionType>()) {
+    return emitOpError("requires type attribute of function type");
+  }
+
+  return success();
+}
+
 } // end namespace rtl
 } // end namespace mlir

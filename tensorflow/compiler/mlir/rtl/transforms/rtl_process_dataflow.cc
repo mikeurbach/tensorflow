@@ -7,7 +7,6 @@
 #include "llvm/Support/Debug.h"  // TF:llvm-project
 #include "llvm/Support/ScopedPrinter.h"  // TF:llvm-project
 #include "llvm/Support/raw_ostream.h"  // TF:llvm-project
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
 #include "mlir/IR/PatternMatch.h"  // TF:llvm-project
@@ -48,10 +47,10 @@ class LegalizeDataflow : public PassWrapper<LegalizeDataflow, FunctionPass> {
   }
 };
 
-class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<ModuleOp>> {
+class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<mlir::ModuleOp>> {
  public:
   void runOnOperation() override {
-    ModuleOp module = getOperation();
+    mlir::ModuleOp module = getOperation();
 
     OpBuilder builder = OpBuilder(module.getBody()->getTerminator());
 
@@ -179,15 +178,13 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
 
   void buildMainBody(FuncOp function, OpBuilder builder, WiringTable wiringTable) {
     // create top-level main function
-    FunctionType liftedType = liftedFunctionType(
-        builder, function.getType().getInputs(), function.getType().getResults());
+    TypeAttr liftedType = TypeAttr::get(liftedFunctionType(
+        builder, function.getType().getInputs(), function.getType().getResults()));
 
     std::string liftedName = MAIN_FUNCTION_NAME;
 
-    ArrayRef<NamedAttribute> liftedAttrs = {};
-
-    FuncOp main = builder.create<FuncOp>(
-        function.getLoc(), liftedName, liftedType, liftedAttrs);
+    ModuleOp main = builder.create<ModuleOp>(
+        function.getLoc(), liftedName, liftedType);
 
     // add a body to the top-level function
     Block *entry = main.addEntryBlock();
@@ -276,15 +273,13 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
   void liftUnitRateOp(dataflow::UnitRateOp op, OpBuilder builder, WiringTable *wiringTable) {
     Operation &operation = *op.getOperation();
 
-    FunctionType liftedType = liftedFunctionType(
-        builder, operation.getOperandTypes(), operation.getResultTypes());
+    TypeAttr liftedType = TypeAttr::get(liftedFunctionType(
+        builder, operation.getOperandTypes(), operation.getResultTypes()));
 
     std::string liftedName = liftedFunctionName(operation);
 
-    ArrayRef<NamedAttribute> liftedAttrs = {};
-
-    FuncOp lifted = builder.create<FuncOp>(
-        op.getLoc(), liftedName, liftedType, liftedAttrs);
+    ModuleOp lifted = builder.create<ModuleOp>(
+        op.getLoc(), liftedName, liftedType);
 
     configureLiftedFunction(op, lifted, builder, wiringTable);
   }
@@ -323,7 +318,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     return name;
   }
 
-  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, FuncOp lifted, OpBuilder builder,
+  void configureLiftedFunction(dataflow::UnitRateOp &baseOp, ModuleOp lifted, OpBuilder builder,
                                WiringTable *wiringTable) {
     Operation &op = *baseOp.getOperation();
 

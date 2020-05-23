@@ -4,7 +4,6 @@
 include "mlir/Interfaces/SideEffects.td"
 include "mlir/IR/OpBase.td"
 
-
 // base
 
 def RTL_Dialect : Dialect {
@@ -226,6 +225,48 @@ def RTL_XorOp : RTL_BinaryLogicalOp<"xor"> {
 }
 
 // structural ops
+def RTL_ModuleOp
+    : RTL_Op<"module", [FunctionLike, Symbol, SingleBlockImplicitTerminator<"ReturnOp">]> {
+  let summary = [{
+    Module op.
+  }];
+
+  let description = [{
+    An operation to represent a module in structural HDL.
+  }];
+
+  let arguments = (ins
+    StrAttr:$sym_name,
+    TypeAttr:$type
+  );
+
+  let regions = (region
+    SizedRegion<1>:$body
+  );
+
+  let extraClassDeclaration = [{
+    // Hooks for OpTrait::FunctionLike
+    unsigned getNumFuncArguments();
+    unsigned getNumFuncResults();
+    LogicalResult verifyType();
+  }];
+}
+
+def RTL_ReturnOp
+    : RTL_Op<"return", [NoSideEffect, HasParent<"ModuleOp">, Terminator]> {
+  let summary = [{
+    Return op.
+  }];
+
+  let description = [{
+    An operation to terminate a module and indicate its return signals.
+  }];
+
+  let arguments = (ins
+    Variadic<RTL_DataType>:$args
+  );
+}
+
 def RTL_WireOp : RTL_Op<"wire", [ConstantLike]> {
   let summary = [{
     Wire op.
