@@ -5,6 +5,7 @@
 #include "mlir/IR/Dialect.h"  // TF:llvm-project
 #include "mlir/IR/Function.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
+#include "mlir/IR/OpImplementation.h"  // TF:llvm-project
 #include "mlir/IR/StandardTypes.h"  // TF:llvm-project
 #include "mlir/Interfaces/SideEffects.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/rtl/ir/rtl_ops.h"

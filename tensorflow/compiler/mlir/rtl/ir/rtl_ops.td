@@ -13,6 +13,7 @@ def RTL_Dialect : Dialect {
 
 class RTL_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<RTL_Dialect, mnemonic, traits> {
+  let printer = [{ return rtl::print(p, *this); }];
 }
 
 // types
