@@ -67,6 +67,8 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
           connectMainPorts(function, builder, &wiringTable);
 
           buildMainBody(function, builder, wiringTable);
+
+          function.erase();
         });
   }
  private:
