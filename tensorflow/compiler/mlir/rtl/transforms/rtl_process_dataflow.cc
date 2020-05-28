@@ -227,7 +227,18 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
       builder.create<InstanceOp>(main.getLoc(), instantiation);
     }
 
-    // insert a return with every output wire in the top-level function
+    // insert an InputOp with every input wire in the top-level function
+    auto mainInputs = wiringTable.lookupFuncPorts(
+        MAIN_FUNCTION_NAME, WiringTable::PortType::INPUT);
+
+    std::vector<Value> inputWires(mainInputs.size());
+    for(auto it = mainInputs.begin(); it != mainInputs.end(); ++it) {
+      inputWires[it->first] = wireMap[it->second];
+    }
+
+    builder.create<InputOp>(main.getLoc(), inputWires);
+
+    // insert a ReturnOp with every output wire in the top-level function
     auto mainOutputs = wiringTable.lookupFuncPorts(
         MAIN_FUNCTION_NAME, WiringTable::PortType::OUTPUT);
 
@@ -384,7 +395,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     if(op.getNumOperands() == 0) {
       // with no inputs, always valid
       ConstantOp const1 = builder.create<ConstantOp>(
-          op.getLoc(), bitType, DenseElementsAttr::get(bitType, APInt(1, 1)));
+          op.getLoc(), bitType, DenseIntElementsAttr::get(bitType, APInt(1, 1)));
       valid = const1.getResult();
     } else {
       // with inputs, valid when they all are

@@ -4,6 +4,7 @@
 #include "mlir/IR/Builders.h"  // TF:llvm-project
 #include "mlir/IR/Dialect.h"  // TF:llvm-project
 #include "mlir/IR/Function.h"  // TF:llvm-project
+#include "mlir/IR/Module.h"  // TF:llvm-project
 #include "mlir/IR/OpDefinition.h"  // TF:llvm-project
 #include "mlir/IR/OpImplementation.h"  // TF:llvm-project
 #include "mlir/IR/StandardTypes.h"  // TF:llvm-project

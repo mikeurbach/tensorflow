@@ -24,6 +24,11 @@ def RTL_ControlType : AnyTypeOf<
 def RTL_DataType : AnyTypeOf<
     [0DTensorOf<[AnySignlessInteger]>, TupleOf<[0DTensorOf<[AnySignlessInteger]>]>]>;
 
+// attriutes
+
+def RTL_AnyIntAttr : IntElementsAttrBase<CPred<"true">, "Any int attribute.">;
+def RTL_FunctionTypeAttr : TypeAttrBase<"FunctionType", "A function type attribute.">;
+
 // unit rate ops
 
 def RTL_ConstantOp : RTL_Op<"constant",
@@ -37,11 +42,11 @@ def RTL_ConstantOp : RTL_Op<"constant",
   }];
 
   let arguments = (ins
-    ElementsAttr:$value
+    RTL_AnyIntAttr:$value
   );
 
   let results = (outs
-    RTL_DataType:$results
+    RTL_DataType:$result
   );
 }
 
@@ -238,7 +243,7 @@ def RTL_ModuleOp
 
   let arguments = (ins
     StrAttr:$sym_name,
-    TypeAttr:$type
+    RTL_FunctionTypeAttr:$type
   );
 
   let regions = (region
@@ -251,6 +256,21 @@ def RTL_ModuleOp
     unsigned getNumFuncResults();
     LogicalResult verifyType();
   }];
+}
+
+def RTL_InputOp
+    : RTL_Op<"input", [NoSideEffect, HasParent<"ModuleOp">]> {
+  let summary = [{
+    Input op.
+  }];
+
+  let description = [{
+    An operation to indicate a module's return signals.
+  }];
+
+  let arguments = (ins
+    Variadic<RTL_DataType>:$args
+  );
 }
 
 def RTL_ReturnOp
