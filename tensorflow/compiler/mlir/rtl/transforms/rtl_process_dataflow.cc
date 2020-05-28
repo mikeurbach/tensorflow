@@ -322,7 +322,7 @@ class LiftOpsToFunctions : public PassWrapper<LiftOpsToFunctions, OperationPass<
     if(op.hasTrait<mlir::OpTrait::Symbol>()){
       name += SymbolTable::getSymbolName(&op);
     } else {
-      name += op.getName().getStringRef();
+      name += op.getName().getStringRef().split(".").second;
       name += "_";
       name += std::to_string((long) ((const void *) &op));
     }

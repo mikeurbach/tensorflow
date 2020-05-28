@@ -19,7 +19,7 @@ unsigned ModuleOp::getNumFuncArguments() {
 }
 
 unsigned ModuleOp::getNumFuncResults() {
-  getType().getInputs().size();
+  getType().getResults().size();
 }
 
 LogicalResult ModuleOp::verifyType() {
@@ -48,22 +48,42 @@ static void printWireDeclaration(OpAsmPrinter &p, Type type) {
   printType(p, type);
 }
 
+static void printValueName(OpAsmPrinter &p, Value value) {
+  // print the value into a separate string
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  p.printOperand(value, os);
+
+  // drop the leading "%"
+  StringRef name = StringRef(os.str()).drop_front(1);
+
+  if(value.getKind() == Value::Kind::BlockArgument) {
+    // value is an input to a ModuleOp, use its name directly
+    p << name;
+  } else {
+    // value is an SSA result, prepend "tmp" to its SSA ID
+    p << "tmp" << name;
+  }
+}
+
 static void printUnaryOp(OpAsmPrinter &p, Value result, Value arg, StringRef op) {
   printWireDeclaration(p, result.getType());
-  p << " " << result;
+  p << " ";
+  printValueName(p, result);
   p << " = ";
   p << op;
-  p << arg;
+  printValueName(p, arg);
   p << ";";
 }
 
 static void printBinaryOp(OpAsmPrinter &p, Value result, Value left, Value right, StringRef op) {
   printWireDeclaration(p, result.getType());
-  p << " " << result;
+  p << " ";
+  printValueName(p, result);
   p << " = ";
-  p << left;
+  printValueName(p, left);
   p << " " << op << " ";
-  p << right;
+  printValueName(p, right);
   p << ";";
 }
 
@@ -78,7 +98,7 @@ static void printPorts(OpAsmPrinter &p, FunctionType type) {
     p << "    input";
     printType(p, inputType);
     p << " arg" << std::to_string(i);
-    if(i < numInputs - 1) {
+    if(numOutputs > 0 || i < numInputs - 1) {
       p << ",";
     }
     p << "\n";
@@ -109,7 +129,7 @@ static void print(OpAsmPrinter &p, ModuleOp op) {
     abstractOp->printAssembly(&op, p);
     p << "\n";
   }
-  p << "  endmodule";
+  p << "  endmodule\n";
 }
 
 static void print(OpAsmPrinter &p, InputOp op) {
@@ -143,7 +163,7 @@ static void print(OpAsmPrinter &p, ReturnOp op) {
       p << cast<WireOp>(op.getOperand(i).getDefiningOp()).name();
     } else {
       // for every other function, we're returning the generated wire name
-      p << op.getOperand(i);
+      printValueName(p, op.getOperand(i));
     }
     p << ";";
     if(i < numOperands - 1) {
@@ -187,7 +207,8 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
 static void print(OpAsmPrinter &p, ConstantOp op) {
   Value result = op.result();
   printWireDeclaration(p, result.getType());
-  p << " " << result;
+  p << " ";
+  printValueName(p, result);
   p << " = ";
   APInt constant = *op.value().begin();
   unsigned bitWidth = constant.getBitWidth();
