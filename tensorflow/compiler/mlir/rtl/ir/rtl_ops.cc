@@ -195,11 +195,19 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
   p << " (\n";
   for(unsigned i = 0; i < numArgs; ++i) {
     p << "      .arg" << i;
-    p << "(" << ports[i].getValue() << ")\n";
+    p << "(" << ports[i].getValue() << ")";
+    if(numResults > 0 || i < numArgs - 1) {
+      p << ",";
+    }
+    p << "\n";
   }
   for(unsigned i = 0; i < numResults; ++i) {
     p << "      .ret" << i;
-    p << "(" << ports[numArgs + i].getValue() << ")\n";
+    p << "(" << ports[numArgs + i].getValue() << ")";
+    if(i < numResults - 1) {
+      p << ",";
+    }
+    p << "\n";
   }
   p << "    );";
 }
